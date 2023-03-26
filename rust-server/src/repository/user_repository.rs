@@ -1,14 +1,194 @@
+use crate::database::{DbError, DbPool, ERR_POOL_CANNOT_GET_CONNECTION};
 use crate::models::users::{NewUser, User};
 use crate::models::users_oauth::{NewUserOAuth, UserOAuth};
 use argon2::{self, Config};
+use diesel::dsl::sql;
 use diesel::prelude::*;
 use rand::Rng;
-
-type DbError = Box<dyn std::error::Error + Send + Sync>;
 
 pub const MANUAL_REGISTRATION: &str = "Manual";
 pub const OAUTH_REGISTRATION: &str = "OAuth";
 pub const GOOGLE_PROVIDER: &str = "Google";
+
+pub trait UserRepository: Send + Sync {
+    fn find_user_by_username_and_registration(
+        &self,
+        _usrname: &str,
+        _registratio_type: &str,
+    ) -> Result<Option<User>, DbError> {
+        unimplemented!()
+    }
+
+    fn find_user_by_id(&self, _user_id: i32) -> Result<Option<User>, DbError> {
+        unimplemented!()
+    }
+
+    fn find_oauth_user_by_oauth_id(&self, _auth_id: &str) -> Result<Option<UserOAuth>, DbError> {
+        unimplemented!()
+    }
+
+    fn check_user_login(&self, _usrname: &str, _pass: &str) -> Result<Option<User>, DbError> {
+        unimplemented!()
+    }
+
+    fn insert_new_user<'a>(
+        &self,
+        _usrname: &'a str,
+        _pass: Option<&'a str>,
+        _registratio_type: &str,
+    ) -> Result<NewUser, DbError> {
+        unimplemented!()
+    }
+
+    fn insert_new_oauth_user<'a>(
+        &self,
+        _usrname: &'a str,
+        _auth_id: &'a str,
+        _auth_provider: &'a str,
+    ) -> Result<NewUserOAuth, DbError> {
+        unimplemented!()
+    }
+}
+
+pub struct UserRepositoryMain {
+    pub conn_pool: DbPool,
+}
+
+impl UserRepository for UserRepositoryMain {
+    // some variables might be mispelled to prevent collision with column imported inside the function, true for all functions.
+    fn find_user_by_username_and_registration(
+        &self,
+        usrname: &str,
+        registratio_type: &str,
+    ) -> Result<Option<User>, DbError> {
+        use crate::models::schema::users::dsl::*;
+
+        let mut conn = self.conn_pool.get().expect(ERR_POOL_CANNOT_GET_CONNECTION);
+        let user = users
+            .filter(username.eq(usrname))
+            .filter(registration_type.eq(registratio_type))
+            .first::<User>(&mut conn)
+            .optional()?;
+
+        Ok(user)
+    }
+
+    fn find_user_by_id(&self, user_id: i32) -> Result<Option<User>, DbError> {
+        use crate::models::schema::users::dsl::*;
+
+        let mut conn = self.conn_pool.get().expect(ERR_POOL_CANNOT_GET_CONNECTION);
+
+        let user = users
+            .filter(id.eq(user_id))
+            .first::<User>(&mut conn)
+            .optional()?;
+
+        Ok(user)
+    }
+
+    fn find_oauth_user_by_oauth_id(&self, auth_id: &str) -> Result<Option<UserOAuth>, DbError> {
+        use crate::models::schema::users_oauth::dsl::*;
+
+        let mut conn = self.conn_pool.get().expect(ERR_POOL_CANNOT_GET_CONNECTION);
+
+        let user = users_oauth
+            .filter(oauth_id.eq(auth_id))
+            .first::<UserOAuth>(&mut conn)
+            .optional()?;
+
+        Ok(user)
+    }
+
+    fn check_user_login(&self, usrname: &str, pass: &str) -> Result<Option<User>, DbError> {
+        use crate::models::schema::users::dsl::*;
+
+        let mut conn = self.conn_pool.get().expect(ERR_POOL_CANNOT_GET_CONNECTION);
+
+        let user = users
+            .filter(username.eq(usrname))
+            .first::<User>(&mut conn)
+            .optional()?;
+
+        if user.is_none() {
+            return Ok(user);
+        }
+
+        let password_hash = (user.as_ref()).unwrap().password.as_ref().unwrap(); // TODO is this the best way?
+
+        let is_valid_password = verify_password(pass, &password_hash);
+
+        if !is_valid_password {
+            return Ok(None);
+        } else {
+            return Ok(user);
+        }
+    }
+
+    fn insert_new_user<'a>(
+        &self,
+        usrname: &'a str,
+        pass: Option<&'a str>,
+        registratio_type: &str,
+    ) -> Result<NewUser, DbError> {
+        use crate::models::schema::users::dsl::*;
+        let hashed_password = pass.map(|p| hash_password(p));
+
+        let new_user = NewUser {
+            username: usrname.to_owned(),
+            password: hashed_password,
+            registration_type: registratio_type.to_owned(),
+        };
+
+        let mut conn = self.conn_pool.get().expect(ERR_POOL_CANNOT_GET_CONNECTION);
+
+        diesel::insert_into(users)
+            .values(&new_user)
+            .execute(&mut conn)?;
+
+        Ok(new_user)
+    }
+
+    fn insert_new_oauth_user<'a>(
+        &self,
+        usrname: &'a str,
+        auth_id: &'a str,
+        auth_provider: &'a str,
+    ) -> Result<NewUserOAuth, DbError> {
+        use crate::models::schema::users::dsl::*;
+        use crate::models::schema::users_oauth::dsl::*;
+
+        let mut conn = self.conn_pool.get().expect(ERR_POOL_CANNOT_GET_CONNECTION);
+
+        let new_user_oauth = conn.transaction(move |conn| {
+            let new_user = NewUser {
+                username: usrname.to_owned(),
+                password: None,
+                registration_type: OAUTH_REGISTRATION.to_owned(),
+            };
+
+            diesel::insert_into(users).values(&new_user).execute(conn)?;
+
+            // TODO, is this reliable?
+            let last_insert_id: i32 =
+                diesel::select(sql::<diesel::sql_types::Integer>("LAST_INSERT_ID()"))
+                    .first(conn)
+                    .expect("Error getting last inserted ID");
+
+            let new_user_ouath = NewUserOAuth {
+                user_id: last_insert_id,
+                oauth_id: auth_id.to_owned(),
+                oauth_provider: auth_provider.to_owned(),
+            };
+
+            diesel::insert_into(users_oauth)
+                .values(&new_user_ouath)
+                .execute(conn)
+                .map(|_x| new_user_ouath)
+        })?;
+
+        Ok(new_user_oauth)
+    }
+}
 
 fn hash_password(password_to_hash: &str) -> String {
     let config = Config::default();
@@ -24,112 +204,14 @@ fn verify_password(password_to_hash: &str, hash: &str) -> bool {
         .expect("Error in argon::verify_encoded, something wrong?")
 }
 
-// some variables might be mispelled to prevent collision with column imported inside the function, true for all functions.
-pub fn find_user_by_username_and_registration(
-    conn: &mut MysqlConnection,
-    usrname: &str,
-    registratio_type: &str,
-) -> Result<Option<User>, DbError> {
-    use crate::models::schema::users::dsl::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let user = users
-        .filter(username.eq(usrname))
-        .filter(registration_type.eq(registratio_type))
-        .first::<User>(conn)
-        .optional()?;
-
-    Ok(user)
-}
-
-pub fn find_user_by_id(conn: &mut MysqlConnection, user_id: i32) -> Result<Option<User>, DbError> {
-    use crate::models::schema::users::dsl::*;
-
-    let user = users
-        .filter(id.eq(user_id))
-        .first::<User>(conn)
-        .optional()?;
-
-    Ok(user)
-}
-
-pub fn find_oauth_user_by_oauth_id(
-    conn: &mut MysqlConnection,
-    auth_id: &str,
-) -> Result<Option<UserOAuth>, DbError> {
-    use crate::models::schema::users_oauth::dsl::*;
-
-    let user = users_oauth
-        .filter(oauth_id.eq(auth_id))
-        .first::<UserOAuth>(conn)
-        .optional()?;
-
-    Ok(user)
-}
-
-pub fn check_user_login(
-    conn: &mut MysqlConnection,
-    usrname: &str,
-    pass: &str,
-) -> Result<Option<User>, DbError> {
-    use crate::models::schema::users::dsl::*;
-
-    let user = users
-        .filter(username.eq(usrname))
-        .first::<User>(conn)
-        .optional()?;
-
-    if user.is_none() {
-        return Ok(user);
+    #[test]
+    fn hash_verify_password() {
+        let password = "abcdefghi123#!@";
+        let hash = hash_password(password);
+        assert!(verify_password(password, &hash));
     }
-
-    let password_hash = (user.as_ref()).unwrap().password.as_ref().unwrap(); // TODO is this the best way?
-
-    let is_valid_password = verify_password(pass, &password_hash);
-
-    if !is_valid_password {
-        return Ok(None);
-    } else {
-        return Ok(user);
-    }
-}
-
-pub fn insert_new_user<'a>(
-    conn: &mut MysqlConnection,
-    usrname: &'a str,
-    pass: Option<&'a str>,
-    registratio_type: &str,
-) -> Result<NewUser, DbError> {
-    use crate::models::schema::users::dsl::*;
-    let hashed_password = pass.map(|p| hash_password(p));
-
-    let new_user = NewUser {
-        username: usrname.to_owned(),
-        password: hashed_password,
-        registration_type: registratio_type.to_owned(),
-    };
-
-    diesel::insert_into(users).values(&new_user).execute(conn)?;
-
-    Ok(new_user)
-}
-
-pub fn insert_new_oauth_user<'a>(
-    conn: &mut MysqlConnection,
-    usr_id: i32,
-    auth_id: &'a str,
-    auth_provider: &'a str,
-) -> Result<NewUserOAuth, DbError> {
-    use crate::models::schema::users_oauth::dsl::*;
-
-    let new_user = NewUserOAuth {
-        user_id: usr_id,
-        oauth_id: auth_id.to_owned(),
-        oauth_provider: auth_provider.to_owned(),
-    };
-
-    diesel::insert_into(users_oauth)
-        .values(&new_user)
-        .execute(conn)?;
-
-    Ok(new_user)
 }
