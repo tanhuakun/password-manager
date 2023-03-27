@@ -1,4 +1,4 @@
-use crate::repository::jwt_repository::{generate_token, verify_token};
+use crate::utils::jwt_utils::{generate_token, verify_token};
 use crate::repository::user_repository::{UserRepository, GOOGLE_PROVIDER, MANUAL_REGISTRATION};
 use actix_web::{
     cookie::{Cookie, SameSite},

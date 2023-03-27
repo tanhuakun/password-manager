@@ -12,6 +12,7 @@ pub mod database;
 pub mod handlers;
 pub mod models;
 pub mod repository;
+pub mod utils;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
