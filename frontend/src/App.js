@@ -8,6 +8,7 @@ import CustomNavbar from "pages/main/CustomNavbar";
 import TwoFactorAuthPage from "pages/main/twofactorauth/TwoFactorAuthPage";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import Verify2FAPage from "pages/frontpage/Verify2FAPage";
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/verify_2fa" element={<Verify2FAPage/>} />
         <Route path="/" element={<CustomNavbar />}>
           <Route path="/home" element={<PasswordTable />} />
           <Route path="/2fa" element={<TwoFactorAuthPage />} />

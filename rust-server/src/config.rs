@@ -1,0 +1,1 @@
+pub const ACCESS_TOKEN_TIME_SECONDS: i64 = 60 * 60 * 24;

@@ -5,19 +5,22 @@ import {
   post_google_login,
   check_login,
 } from "api/authentication.js";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Spinner from "react-bootstrap/Spinner";
 import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
 import { toast } from 'react-toastify';
 
 function LoginPage() {
+  const NEXT_DASHBOARD = "Dashboard";
+  const NEXT_2FA = "2FA";
   const [isLoading, setIsLoading] = useState(false);
   const [isInvalidCredentials, setIsInvalidCredentials] = useState(false);
   const [formData, setFormData] = useState({
     username: "",
     password: "",
   });
+  const navigate = useNavigate();
 
   useLayoutEffect(() => {
     async function check() {
@@ -28,10 +31,10 @@ function LoginPage() {
 
       if (res.status === 401) {
         console.log("Unauthorized");
+        return;
       }
 
-      // TODO redirect
-      console.log(res);
+      navigate("/home");
     }
     check();
   }, []);
@@ -41,6 +44,17 @@ function LoginPage() {
     const key = e.target.name;
     const value = e.target.value;
     setFormData({ ...formData, [key]: value });
+  }
+
+  function handle_login_response(res) {
+    console.log(res);
+    if (res.data.next === NEXT_DASHBOARD) {
+      navigate("/home");
+    } else if (res.data.next == NEXT_2FA) {
+      navigate("/verify_2fa");
+    } else {
+      toast.error("Something went wrong!");
+    }
   }
 
   const googleLogin = useGoogleLogin({
@@ -54,7 +68,7 @@ function LoginPage() {
         return;
       }
 
-      // TODO happy path
+      handle_login_response(res);
     },
     onError: () => {
       console.log("Login Failed");
@@ -87,7 +101,7 @@ function LoginPage() {
       return;
     }
 
-    // TODO happy path
+    handle_login_response(res);
   }
 
   return (

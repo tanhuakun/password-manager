@@ -1,6 +1,8 @@
+use crate::config::ACCESS_TOKEN_TIME_SECONDS;
 use crate::repository::user_repository::{UserRepository, GOOGLE_PROVIDER, MANUAL_REGISTRATION};
 use crate::utils::jwt_utils::{generate_token, verify_token};
 use crate::utils::totp_utils::{generate_secret_key, generate_totp, generate_totp_url};
+use actix_session::Session;
 use actix_web::{
     cookie::{Cookie, SameSite},
     dev::Payload,
@@ -13,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 pub const AUTH_COOKIE_NAME: &str = "access_token";
+pub const SESSION_PENDING_2FA_KEY: &str = "pending_2fa_id";
 
 #[derive(Serialize)]
 pub struct AuthenticatedUser {
@@ -73,6 +76,37 @@ impl FromRequest for AuthenticatedUser {
     }
 }
 
+fn generate_success_login_response(
+    user_id: i32,
+    require_2fa: bool,
+    encoding_key: web::Data<EncodingKey>,
+    session: Session,
+) -> Result<HttpResponse> {
+    if require_2fa {
+        session.insert(SESSION_PENDING_2FA_KEY, user_id)?;
+
+        return Ok(HttpResponse::Ok().json(json!({
+            "next": "2FA"
+        })));
+    } else {
+        let auth_token = generate_token(user_id, &encoding_key)
+            .map_err(actix_web::error::ErrorInternalServerError)?;
+
+        let mut response = HttpResponse::Ok();
+
+        let cookie = Cookie::build(AUTH_COOKIE_NAME, auth_token)
+            .http_only(true)
+            .path("/")
+            .max_age(time::Duration::seconds(ACCESS_TOKEN_TIME_SECONDS))
+            .same_site(SameSite::None) // TODO require better security.
+            .finish();
+
+        return Ok(response.cookie(cookie).json(json!({
+            "next": "Dashboard"
+        })));
+    }
+}
+
 #[post("/register")]
 pub async fn register(
     user_repository: web::Data<dyn UserRepository>,
@@ -119,6 +153,7 @@ pub async fn login(
     user_repository: web::Data<dyn UserRepository>,
     user_details: web::Json<LoginDetails>,
     encoding_key: web::Data<EncodingKey>,
+    session: Session,
 ) -> Result<impl Responder> {
     let login_result = web::block(move || {
         user_repository.check_user_login(&user_details.username, &user_details.password)
@@ -134,19 +169,9 @@ pub async fn login(
         return Ok(HttpResponse::Unauthorized().json(response_body));
     }
 
-    let auth_token = login_result
-        .map(|auth_user_details| generate_token(auth_user_details.id, &encoding_key).unwrap())
-        .unwrap();
+    let user = login_result.unwrap();
 
-    let mut response = HttpResponse::Ok();
-
-    let cookie = Cookie::build(AUTH_COOKIE_NAME, auth_token)
-        .http_only(true)
-        .same_site(SameSite::None) // TODO require better security.
-        .finish();
-
-    response.cookie(cookie);
-    Ok(response.finish())
+    generate_success_login_response(user.id, user.totp_enabled, encoding_key, session)
 }
 
 #[post("/google_login")]
@@ -154,6 +179,7 @@ pub async fn google_login(
     user_repository: web::Data<dyn UserRepository>,
     google_login_details: web::Json<GoogleLoginDetails>,
     encoding_key: web::Data<EncodingKey>,
+    session: Session,
 ) -> Result<impl Responder> {
     let google_access_token = &google_login_details.access_token;
 
@@ -180,15 +206,19 @@ pub async fn google_login(
     .await?
     .map_err(actix_web::error::ErrorInternalServerError)?;
 
-    let auth_token;
+    let totp_enabled;
+    let user_id;
     if let Some(oauth_user) = oauth_user {
         let cloned_user_repository = user_repository.clone();
 
         // user should be present because a user is created for each user_oauth entry.
         let user = web::block(move || cloned_user_repository.find_user_by_id(oauth_user.user_id))
             .await?
-            .map_err(actix_web::error::ErrorInternalServerError)?;
-        auth_token = generate_token(user.unwrap().id, &encoding_key).unwrap();
+            .map_err(actix_web::error::ErrorInternalServerError)?
+            .unwrap();
+
+        totp_enabled = user.totp_enabled;
+        user_id = user.id;
     } else {
         let new_oauth_user = web::block(move || {
             user_repository.insert_new_oauth_user(
@@ -200,18 +230,11 @@ pub async fn google_login(
         .await?
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
-        auth_token = generate_token(new_oauth_user.user_id, &encoding_key).unwrap()
+        user_id = new_oauth_user.user_id;
+        totp_enabled = false;
     }
 
-    let mut response = HttpResponse::Ok();
-
-    let cookie = Cookie::build(AUTH_COOKIE_NAME, auth_token)
-        .http_only(true)
-        .same_site(SameSite::None) // TODO require better security.
-        .finish();
-
-    response.cookie(cookie);
-    Ok(response.finish())
+    generate_success_login_response(user_id, totp_enabled, encoding_key, session)
 }
 
 #[get("/check_login")]
@@ -219,6 +242,48 @@ pub async fn check_login(authenticated_user: AuthenticatedUser) -> Result<impl R
     Ok(HttpResponse::Ok().json(json!({
         "user_id" : authenticated_user.user_id
     })))
+}
+
+/*
+    For verifying 2FA code.
+    Right now there does not seem to be an easy way to test sessions!
+    TODO: Write unit tests for this function.
+ */
+#[post("/verify_2fa")]
+pub async fn verify_2fa(
+    user_repository: web::Data<dyn UserRepository>,
+    encoding_key: web::Data<EncodingKey>,
+    code: web::Json<AuthenticatorCode>,
+    session: Session,
+) -> Result<impl Responder> {
+    let user_id = session.get::<i32>(SESSION_PENDING_2FA_KEY)?;
+
+    if user_id.is_none() {
+        return Ok(HttpResponse::Unauthorized().json(json!({
+            "msg": "Relogin"
+        })));
+    }
+
+    let user_id = user_id.unwrap();
+
+    let cloned_user_repository = user_repository.clone();
+    let user = web::block(move || cloned_user_repository.find_user_by_id(user_id))
+        .await?
+        .map_err(actix_web::error::ErrorInternalServerError)?
+        .unwrap();
+
+    // check code!
+    let generated_code = generate_totp(user.totp_base32.unwrap());
+
+    if !generated_code.eq(&code.code) {
+        return Ok(HttpResponse::Forbidden().json(json!({
+            "msg" : "Wrong code"
+        })));
+    }
+
+    session.remove(SESSION_PENDING_2FA_KEY);
+
+    generate_success_login_response(user_id, false, encoding_key, session)
 }
 
 #[get("/2fa_url")]

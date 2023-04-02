@@ -1,6 +1,7 @@
 use chrono::Utc;
 use jsonwebtoken::{decode, encode, errors::Error, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
+use crate::config::ACCESS_TOKEN_TIME_SECONDS;
 
 use std::convert::TryFrom;
 
@@ -14,7 +15,7 @@ pub fn generate_token(user_id: i32, encoding_key: &EncodingKey) -> Result<String
     let header = Header::default();
     let claims = Claims {
         user_id: user_id,
-        exp: usize::try_from(Utc::now().timestamp() + 60 * 60 * 24).unwrap(),
+        exp: usize::try_from(Utc::now().timestamp() + ACCESS_TOKEN_TIME_SECONDS).unwrap(),
     };
 
     encode(&header, &claims, encoding_key)
