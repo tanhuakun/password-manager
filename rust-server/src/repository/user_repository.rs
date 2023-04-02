@@ -48,6 +48,18 @@ pub trait UserRepository: Send + Sync {
     ) -> Result<NewUserOAuth, DbError> {
         unimplemented!()
     }
+
+    fn update_user_totp_secret(
+        &self,
+        _usr_id: i32,
+        _totp_secret_base32: &str,
+    ) -> Result<(), DbError> {
+        unimplemented!()
+    }
+
+    fn set_user_totp_enabled(&self, _usr_id: i32, _is_enabled: bool) -> Result<(), DbError> {
+        unimplemented!()
+    }
 }
 
 pub struct UserRepositoryMain {
@@ -187,6 +199,36 @@ impl UserRepository for UserRepositoryMain {
         })?;
 
         Ok(new_user_oauth)
+    }
+
+    fn update_user_totp_secret(
+        &self,
+        usr_id: i32,
+        totp_secret_base32: &str,
+    ) -> Result<(), DbError> {
+        use crate::models::schema::users::dsl::*;
+
+        let mut conn = self.conn_pool.get().expect(ERR_POOL_CANNOT_GET_CONNECTION);
+
+        diesel::update(users)
+            .filter(id.eq(usr_id))
+            .set(totp_base32.eq(totp_secret_base32))
+            .execute(&mut conn)?;
+
+        Ok(())
+    }
+
+    fn set_user_totp_enabled(&self, usr_id: i32, is_enabled: bool) -> Result<(), DbError> {
+        use crate::models::schema::users::dsl::*;
+
+        let mut conn = self.conn_pool.get().expect(ERR_POOL_CANNOT_GET_CONNECTION);
+
+        diesel::update(users)
+            .filter(id.eq(usr_id))
+            .set(totp_enabled.eq(is_enabled))
+            .execute(&mut conn)?;
+
+        Ok(())
     }
 }
 

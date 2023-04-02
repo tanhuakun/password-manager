@@ -2,7 +2,9 @@ use actix_cors::Cors;
 use actix_web::{web, App, HttpServer};
 use database::create_db_pool;
 use dotenvy::dotenv;
-use handlers::authentication::{check_login, google_login, login, register};
+use handlers::authentication::{
+    check_login, disable_2fa, finalise_2fa_secret, get_2fa_url, google_login, login, register,
+};
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use repository::user_repository::{UserRepository, UserRepositoryMain};
 use std::env;
@@ -33,13 +35,16 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(encoding_key.clone()))
             .app_data(web::Data::new(decoding_key.clone()))
             .app_data(user_repository_data.clone())
-            .wrap(Cors::permissive())
+            .wrap(Cors::permissive()) // TODO, change this
             .service(
                 web::scope("/api")
                     .service(google_login)
                     .service(login)
                     .service(register)
-                    .service(check_login),
+                    .service(check_login)
+                    .service(get_2fa_url)
+                    .service(finalise_2fa_secret)
+                    .service(disable_2fa),
             )
     })
     .bind(("127.0.0.1", 8080))?

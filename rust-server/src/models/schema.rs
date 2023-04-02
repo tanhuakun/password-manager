@@ -6,6 +6,8 @@ diesel::table! {
         username -> Varchar,
         password -> Nullable<Varchar>,
         registration_type -> Varchar,
+        totp_enabled -> Bool,
+        totp_base32 -> Nullable<Varchar>,
     }
 }
 

@@ -1,9 +1,10 @@
-use crate::utils::jwt_utils::{generate_token, verify_token};
 use crate::repository::user_repository::{UserRepository, GOOGLE_PROVIDER, MANUAL_REGISTRATION};
+use crate::utils::jwt_utils::{generate_token, verify_token};
+use crate::utils::totp_utils::{generate_secret_key, generate_totp, generate_totp_url};
 use actix_web::{
     cookie::{Cookie, SameSite},
     dev::Payload,
-    get, post, web, Error, FromRequest, HttpRequest, HttpResponse, Responder, Result,
+    get, post, put, web, Error, FromRequest, HttpRequest, HttpResponse, Responder, Result,
 };
 use futures_util::future::{ready, Ready};
 use jsonwebtoken::{DecodingKey, EncodingKey};
@@ -39,6 +40,11 @@ pub struct GoogleLoginDetails {
 pub struct GoogleOAuthResponse {
     name: String,
     id: String,
+}
+
+#[derive(Deserialize)]
+pub struct AuthenticatorCode {
+    code: String,
 }
 
 // Extractor for Authentication, used to require login for API routes.
@@ -215,6 +221,93 @@ pub async fn check_login(authenticated_user: AuthenticatedUser) -> Result<impl R
     })))
 }
 
+#[get("/2fa_url")]
+pub async fn get_2fa_url(
+    authenticated_user: AuthenticatedUser,
+    user_repository: web::Data<dyn UserRepository>,
+) -> Result<impl Responder> {
+    // get username
+    let user_id = authenticated_user.user_id;
+
+    let cloned_user_repository = user_repository.clone();
+    let user = web::block(move || cloned_user_repository.find_user_by_id(user_id))
+        .await?
+        .map_err(actix_web::error::ErrorInternalServerError)?
+        .unwrap();
+
+    // ensure totp is not enabled
+    if user.totp_enabled {
+        return Ok(HttpResponse::Conflict().json(json!({
+            "msg": "2FA enabled!"
+        })));
+    }
+
+    // generate secret
+    let secret = generate_secret_key();
+
+    // commit secret
+    let cloned_secret = secret.clone();
+    web::block(move || user_repository.update_user_totp_secret(user_id, &cloned_secret))
+        .await?
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    // generate totp url
+    let url = generate_totp_url(&secret, &user.username);
+    Ok(HttpResponse::Ok().json(json!({ "url": url })))
+}
+
+#[post("/finalise_2fa_secret")]
+pub async fn finalise_2fa_secret(
+    user_repository: web::Data<dyn UserRepository>,
+    authenticated_user: AuthenticatedUser,
+    code: web::Json<AuthenticatorCode>,
+) -> Result<impl Responder> {
+    let user_id = authenticated_user.user_id;
+    let cloned_user_repository = user_repository.clone();
+    let user = web::block(move || cloned_user_repository.find_user_by_id(user_id))
+        .await?
+        .map_err(actix_web::error::ErrorInternalServerError)?
+        .unwrap();
+
+    // ensure totp is not enabled
+    if user.totp_enabled {
+        return Ok(HttpResponse::Conflict().json(json!({
+            "msg": "2FA enabled!"
+        })));
+    }
+
+    // check code!
+    let generated_code = generate_totp(user.totp_base32.unwrap());
+
+    if !generated_code.eq(&code.code) {
+        return Ok(HttpResponse::Forbidden().json(json!({
+            "msg" : "Wrong code"
+        })));
+    }
+
+    // update db!
+    web::block(move || user_repository.set_user_totp_enabled(user_id, true))
+        .await?
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+#[put("/disable_2fa")]
+pub async fn disable_2fa(
+    user_repository: web::Data<dyn UserRepository>,
+    authenticated_user: AuthenticatedUser,
+) -> Result<impl Responder> {
+    let user_id = authenticated_user.user_id;
+
+    // update db!
+    web::block(move || user_repository.set_user_totp_enabled(user_id, false))
+        .await?
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,6 +331,8 @@ mod tests {
                 username: String::from("Test"),
                 password: Some(String::from("Test")),
                 registration_type: String::from(MANUAL_REGISTRATION),
+                totp_enabled: false,
+                totp_base32: None,
             }));
         }
     }
@@ -276,6 +371,8 @@ mod tests {
                 username: String::from("Test"),
                 password: Some(String::from("Test")),
                 registration_type: String::from(MANUAL_REGISTRATION),
+                totp_enabled: false,
+                totp_base32: None,
             }));
         }
     }
@@ -285,6 +382,77 @@ mod tests {
     impl UserRepository for UserRepositoryCheckLoginFailureStub {
         fn check_user_login(&self, _usrname: &str, _pass: &str) -> Result<Option<User>, DbError> {
             return Ok(None);
+        }
+    }
+
+    pub struct UserRepositoryTOTPEnabledStub {}
+
+    impl UserRepository for UserRepositoryTOTPEnabledStub {
+        fn find_user_by_id(&self, _user_id: i32) -> std::result::Result<Option<User>, DbError> {
+            return Ok(Some(User {
+                id: 1,
+                username: String::from("Test"),
+                password: Some(String::from("Test")),
+                registration_type: String::from(MANUAL_REGISTRATION),
+                totp_enabled: true,
+                totp_base32: None,
+            }));
+        }
+    }
+
+    pub struct UserRepositoryGetTOTPUrlSuccessStub {}
+
+    impl UserRepository for UserRepositoryGetTOTPUrlSuccessStub {
+        fn find_user_by_id(&self, _user_id: i32) -> std::result::Result<Option<User>, DbError> {
+            return Ok(Some(User {
+                id: 1,
+                username: String::from("Test"),
+                password: Some(String::from("Test")),
+                registration_type: String::from(MANUAL_REGISTRATION),
+                totp_enabled: false,
+                totp_base32: None,
+            }));
+        }
+
+        fn update_user_totp_secret(
+            &self,
+            _usr_id: i32,
+            _totp_secret_base32: &str,
+        ) -> std::result::Result<(), DbError> {
+            Ok(())
+        }
+    }
+
+    pub struct UserRepositoryFinaliseTOTPSuccessStub {
+        base32_secret: String,
+    }
+
+    impl UserRepository for UserRepositoryFinaliseTOTPSuccessStub {
+        fn find_user_by_id(&self, _user_id: i32) -> std::result::Result<Option<User>, DbError> {
+            return Ok(Some(User {
+                id: 1,
+                username: String::from("Test"),
+                password: Some(String::from("Test")),
+                registration_type: String::from(MANUAL_REGISTRATION),
+                totp_enabled: false,
+                totp_base32: Some(self.base32_secret.clone()),
+            }));
+        }
+
+        fn update_user_totp_secret(
+            &self,
+            _usr_id: i32,
+            _totp_secret_base32: &str,
+        ) -> std::result::Result<(), DbError> {
+            Ok(())
+        }
+
+        fn set_user_totp_enabled(
+            &self,
+            _usr_id: i32,
+            _is_enabled: bool,
+        ) -> std::result::Result<(), DbError> {
+            Ok(())
         }
     }
 
@@ -465,5 +633,164 @@ mod tests {
 
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), actix_web::http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[actix_web::test]
+    async fn get_2fa_url_totp_enabled_test() {
+        let secret = "1qGpT9oS0dChQ287Ve1Uyha6CRG3nqGI";
+        let encoding_key = EncodingKey::from_secret(secret.as_bytes());
+        let decoding_key = DecodingKey::from_secret(secret.as_bytes());
+        let user_repository: Arc<dyn UserRepository> = Arc::new(UserRepositoryTOTPEnabledStub {});
+        let user_repository_data: web::Data<dyn UserRepository> = web::Data::from(user_repository);
+
+        let app = test::init_service(
+            App::new()
+                .service(get_2fa_url)
+                .app_data(user_repository_data)
+                .app_data(web::Data::new(encoding_key.clone()))
+                .app_data(web::Data::new(decoding_key.clone())),
+        )
+        .await;
+
+        let auth_token = generate_token(1, &encoding_key).unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/2fa_url")
+            .cookie(
+                Cookie::build(AUTH_COOKIE_NAME, auth_token)
+                    .http_only(true)
+                    .finish(),
+            )
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), actix_web::http::StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn get_2fa_url_success_test() {
+        let secret = "1qGpT9oS0dChQ287Ve1Uyha6CRG3nqGI";
+        let encoding_key = EncodingKey::from_secret(secret.as_bytes());
+        let decoding_key = DecodingKey::from_secret(secret.as_bytes());
+        let user_repository: Arc<dyn UserRepository> =
+            Arc::new(UserRepositoryGetTOTPUrlSuccessStub {});
+        let user_repository_data: web::Data<dyn UserRepository> = web::Data::from(user_repository);
+
+        let app = test::init_service(
+            App::new()
+                .service(get_2fa_url)
+                .app_data(user_repository_data)
+                .app_data(web::Data::new(encoding_key.clone()))
+                .app_data(web::Data::new(decoding_key.clone())),
+        )
+        .await;
+
+        let auth_token = generate_token(1, &encoding_key).unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/2fa_url")
+            .cookie(
+                Cookie::build(AUTH_COOKIE_NAME, auth_token)
+                    .http_only(true)
+                    .finish(),
+            )
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+    }
+
+    #[actix_web::test]
+    async fn finalise_2fa_secret_totp_enabled_test() {
+        let jwt_secret = "1qGpT9oS0dChQ287Ve1Uyha6CRG3nqGI";
+        let encoding_key = EncodingKey::from_secret(jwt_secret.as_bytes());
+        let decoding_key = DecodingKey::from_secret(jwt_secret.as_bytes());
+        let user_repository: Arc<dyn UserRepository> = Arc::new(UserRepositoryTOTPEnabledStub {});
+        let user_repository_data: web::Data<dyn UserRepository> = web::Data::from(user_repository);
+
+        let app = test::init_service(
+            App::new()
+                .service(finalise_2fa_secret)
+                .app_data(user_repository_data)
+                .app_data(web::Data::new(encoding_key.clone()))
+                .app_data(web::Data::new(decoding_key.clone())),
+        )
+        .await;
+
+        let auth_token = generate_token(1, &encoding_key).unwrap();
+
+        let req = test::TestRequest::post()
+            .uri("/finalise_2fa_secret")
+            .set_json(json!({
+                "code": "123456"
+            }))
+            .cookie(
+                Cookie::build(AUTH_COOKIE_NAME, auth_token)
+                    .http_only(true)
+                    .finish(),
+            )
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), actix_web::http::StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn finalise_2fa_secret_success_test() {
+        let base32_secret = "YI4J6MNVVUNDTMNOX4NXHZW6TYXERTZX";
+        let jwt_secret = "1qGpT9oS0dChQ287Ve1Uyha6CRG3nqGI";
+        let encoding_key = EncodingKey::from_secret(jwt_secret.as_bytes());
+        let decoding_key = DecodingKey::from_secret(jwt_secret.as_bytes());
+        let user_repository: Arc<dyn UserRepository> =
+            Arc::new(UserRepositoryFinaliseTOTPSuccessStub {
+                base32_secret: base32_secret.to_owned(),
+            });
+        let user_repository_data: web::Data<dyn UserRepository> = web::Data::from(user_repository);
+
+        let app = test::init_service(
+            App::new()
+                .service(finalise_2fa_secret)
+                .app_data(user_repository_data)
+                .app_data(web::Data::new(encoding_key.clone()))
+                .app_data(web::Data::new(decoding_key.clone())),
+        )
+        .await;
+
+        let auth_token = generate_token(1, &encoding_key).unwrap();
+
+        let code1 = generate_totp(base32_secret.to_owned());
+
+        let req1 = test::TestRequest::post()
+            .uri("/finalise_2fa_secret")
+            .set_json(json!({ "code": code1 }))
+            .cookie(
+                Cookie::build(AUTH_COOKIE_NAME, auth_token.clone())
+                    .http_only(true)
+                    .finish(),
+            )
+            .to_request();
+
+        let resp1 = test::call_service(&app, req1).await;
+
+        let code2 = generate_totp(base32_secret.to_owned());
+
+        let req2 = test::TestRequest::post()
+            .uri("/finalise_2fa_secret")
+            .set_json(json!({ "code": code2 }))
+            .cookie(
+                Cookie::build(AUTH_COOKIE_NAME, auth_token)
+                    .http_only(true)
+                    .finish(),
+            )
+            .to_request();
+
+        let resp2 = test::call_service(&app, req2).await;
+
+        // there is a small chance the code generated is different from what the test app will generate
+        // doing two checks one after the other and checking if one is successful will remove that chance.
+        let check1 = resp1.status() == actix_web::http::StatusCode::OK;
+        let check2 = resp2.status() == actix_web::http::StatusCode::OK;
+
+        assert!(check1 || check2);
     }
 }

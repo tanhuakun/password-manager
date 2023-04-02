@@ -14,6 +14,16 @@ async function make_post(route, data) {
   }
 }
 
+async function make_put(route, params) {
+  try {
+    const res = await axios.put(API_URL + route, { params });
+    return res;
+  } catch (error) {
+    console.log(error);
+    return error.response;
+  }
+}
+
 async function make_get(route, params) {
   try {
     const res = await axios.get(API_URL + route, { params });
@@ -24,4 +34,4 @@ async function make_get(route, params) {
   }
 }
 
-export { make_post, make_get };
+export { make_post, make_get, make_put };

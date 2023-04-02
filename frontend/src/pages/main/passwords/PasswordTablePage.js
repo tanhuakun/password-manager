@@ -2,9 +2,7 @@ import React from "react";
 import { useTable } from "react-table";
 import { PencilFill, TrashFill } from "react-bootstrap-icons";
 
-// TODO: Make better, Currently a POC.
-
-function Dashboard() {
+function PasswordTablePage() {
   const data = React.useMemo(
     () => [
       {
@@ -100,4 +98,4 @@ function Dashboard() {
   );
 }
 
-export default Dashboard;
+export default PasswordTablePage;

@@ -7,6 +7,8 @@ pub struct User {
     pub username: String,
     pub password: Option<String>,
     pub registration_type: String,
+    pub totp_enabled: bool,
+    pub totp_base32: Option<String>,
 }
 
 use super::schema::users;
