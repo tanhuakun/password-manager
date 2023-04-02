@@ -8,8 +8,7 @@ import QRCode from "react-qr-code";
 import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
 import Spinner from "react-bootstrap/Spinner";
-
-// TODO, add react toasts!
+import { toast } from 'react-toastify';
 
 function TwoFactorAuthPage() {
   const [isFetchingQRUrl, setIsFetchingQRUrl] = useState(true);
@@ -29,14 +28,13 @@ function TwoFactorAuthPage() {
     setIsLoadingRequest(false);
 
     if (!res || res.status === 500) {
-      // TODO, show error!
       setIsInternalServerError(true);
+      toast.error('Server error!');
       return;
     }
 
     if (res.status === 409) {
-      // TODO, show error!
-      console.log("Conflict!!");
+      // Exists!
       setIs2FASetUp(true);
       setIsFetchingQRUrl(false);
       return;
@@ -64,7 +62,7 @@ function TwoFactorAuthPage() {
     let res = await post_finalise_2fa_secret({ code: enteredCode });
     setIsLoadingRequest(false);
     if (!res || res.status === 500) {
-      // TODO, show error!
+      toast.error('Server error!');
       setIsInternalServerError(true);
       return;
     }
@@ -100,7 +98,7 @@ function TwoFactorAuthPage() {
     setIsLoadingRequest(false);
 
     if (!res || res.status === 500) {
-      // TODO, show error!
+      toast.error('Server error!');
       setIsInternalServerError(true);
       return;
     }

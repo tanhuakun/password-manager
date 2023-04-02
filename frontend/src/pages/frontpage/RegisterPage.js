@@ -1,40 +1,21 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { post_register } from "api/authentication.js";
-import Toast from "react-bootstrap/Toast";
-import ToastContainer from "react-bootstrap/ToastContainer";
 import Spinner from "react-bootstrap/Spinner";
 import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
+import { toast } from 'react-toastify';
 
 function RegisterPage() {
   const [doPasswordsMatch, setDoPasswordsMatch] = useState(true);
   const [isExistingUser, setIsExistingUser] = useState(false);
   const [isSuccessful, setIsSuccessful] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
-  const [errorMessage, setErrorMessage] = useState({
-    title: "",
-    body: "",
-  });
-
   const [formData, setFormData] = useState({
     username: "",
     password: "",
     confirm_password: "",
   });
-
-  const [showErrorToast, setShowErrorToast] = useState(false);
-
-  const toggleErrorToast = () => setShowErrorToast(!showErrorToast);
-
-  function showToastMessage(title, body) {
-    setErrorMessage({
-      title: title,
-      body: body,
-    });
-    setShowErrorToast(true);
-  }
 
   function handleChange(e) {
     const key = e.target.name;
@@ -64,10 +45,10 @@ function RegisterPage() {
     }
 
     if (!doPasswordsMatch) {
-      showToastMessage("Form Error", "Passwords do not match!");
+      toast.warn('Passwords do not match!');
       return;
     } else if (!formData.username || !formData.password) {
-      showToastMessage("Form Error", "Details cannot be empty!");
+      toast.warn('Details cannot be empty!');
       return;
     }
     setIsLoading(true);
@@ -76,11 +57,8 @@ function RegisterPage() {
       password: formData.password,
     });
     setIsLoading(false);
-    if (!res) {
-      showToastMessage(
-        "Server Error",
-        "Something went wrong with the server! Please try again later"
-      );
+    if (!res || res.status === 500) {
+      toast.error('Server error!');
       return;
     }
 
@@ -95,14 +73,6 @@ function RegisterPage() {
 
   return (
     <div className="d-flex h-100 p-3 d-flex align-items-center justify-content-center">
-      <ToastContainer className="p-3" position="top-center">
-        <Toast show={showErrorToast} onClose={toggleErrorToast}>
-          <Toast.Header>
-            <strong className="me-auto">{errorMessage.title}</strong>
-          </Toast.Header>
-          <Toast.Body>{errorMessage.body}</Toast.Body>
-        </Toast>
-      </ToastContainer>
       <div className="w-50 h-75">
         <div className="text-center mb-4">
           <h3 className="display-3">Password Manager</h3>

@@ -6,27 +6,18 @@ import {
   check_login,
 } from "api/authentication.js";
 import { Link } from "react-router-dom";
-import Toast from "react-bootstrap/Toast";
-import ToastContainer from "react-bootstrap/ToastContainer";
 import Spinner from "react-bootstrap/Spinner";
 import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
+import { toast } from 'react-toastify';
 
 function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isInvalidCredentials, setIsInvalidCredentials] = useState(false);
-
-  const [errorMessage, setErrorMessage] = useState({
-    title: "",
-    body: "",
-  });
-
   const [formData, setFormData] = useState({
     username: "",
     password: "",
   });
-
-  const [showErrorToast, setShowErrorToast] = useState(false);
 
   useLayoutEffect(() => {
     async function check() {
@@ -45,16 +36,6 @@ function LoginPage() {
     check();
   }, []);
 
-  const toggleErrorToast = () => setShowErrorToast(!showErrorToast);
-
-  function showToastMessage(title, body) {
-    setErrorMessage({
-      title: title,
-      body: body,
-    });
-    setShowErrorToast(true);
-  }
-
   function handleChange(e) {
     setIsInvalidCredentials(false);
     const key = e.target.name;
@@ -68,11 +49,8 @@ function LoginPage() {
       let res = await post_google_login({
         access_token: credentialResponse.access_token,
       });
-      if (!res) {
-        showToastMessage(
-          "Server Error",
-          "Something went wrong with the server! Please try again later"
-        );
+      if (!res || res.status === 500) {
+        toast.error('Server error!');
         return;
       }
 
@@ -99,11 +77,8 @@ function LoginPage() {
     });
     setIsLoading(false);
 
-    if (!res) {
-      showToastMessage(
-        "Server Error",
-        "Something went wrong with the server! Please try again later"
-      );
+    if (!res || res.status === 500) {
+      toast.error('Server error!');
       return;
     }
 
@@ -117,14 +92,6 @@ function LoginPage() {
 
   return (
     <div className="d-flex h-100 p-3 d-flex align-items-center justify-content-center">
-      <ToastContainer className="p-3" position="top-center">
-        <Toast show={showErrorToast} onClose={toggleErrorToast}>
-          <Toast.Header>
-            <strong className="me-auto">{errorMessage.title}</strong>
-          </Toast.Header>
-          <Toast.Body>{errorMessage.body}</Toast.Body>
-        </Toast>
-      </ToastContainer>
       <div className="w-50 h-75">
         <div className="text-center mb-4">
           <h3 className="display-3">Password Manager</h3>
