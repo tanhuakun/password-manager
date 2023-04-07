@@ -5,10 +5,32 @@ use argon2::{self, Config};
 use diesel::dsl::sql;
 use diesel::prelude::*;
 use rand::Rng;
+use std::fmt;
 
 pub const MANUAL_REGISTRATION: &str = "Manual";
 pub const OAUTH_REGISTRATION: &str = "OAuth";
 pub const GOOGLE_PROVIDER: &str = "Google";
+
+#[derive(Debug)]
+pub enum Errors {
+    PasswordNotSetError,
+}
+
+impl Errors {
+    fn get_message(&self) -> &'static str {
+        match self {
+            Errors::PasswordNotSetError => "Password is not set!",
+        }
+    }
+}
+
+impl std::error::Error for Errors {}
+
+impl fmt::Display for Errors {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.get_message())
+    }
+}
 
 pub trait UserRepository: Send + Sync {
     fn find_user_by_username_and_registration(
@@ -58,6 +80,14 @@ pub trait UserRepository: Send + Sync {
     }
 
     fn set_user_totp_enabled(&self, _usr_id: i32, _is_enabled: bool) -> Result<(), DbError> {
+        unimplemented!()
+    }
+
+    fn set_user_password(&self, _usr_id: i32, _new_password: String) -> Result<(), DbError> {
+        unimplemented!()
+    }
+
+    fn check_user_password(&self, _usr_id: i32, _pass: &str) -> Result<bool, DbError> {
         unimplemented!()
     }
 }
@@ -229,6 +259,50 @@ impl UserRepository for UserRepositoryMain {
             .execute(&mut conn)?;
 
         Ok(())
+    }
+
+    fn set_user_password(&self, usr_id: i32, new_password: String) -> Result<(), DbError> {
+        use crate::models::schema::users::dsl::*;
+
+        let mut conn = self.conn_pool.get().expect(ERR_POOL_CANNOT_GET_CONNECTION);
+
+        let hashed_password = hash_password(&new_password);
+
+        diesel::update(users)
+            .filter(id.eq(usr_id))
+            .set(password.eq(hashed_password))
+            .execute(&mut conn)?;
+
+        Ok(())
+    }
+
+    fn check_user_password(&self, usr_id: i32, pass: &str) -> Result<bool, DbError> {
+        use crate::models::schema::users::dsl::*;
+
+        let mut conn = self.conn_pool.get().expect(ERR_POOL_CANNOT_GET_CONNECTION);
+
+        let user = users
+            .filter(id.eq(usr_id))
+            .first::<User>(&mut conn)
+            .optional()?;
+
+        if user.is_none() {
+            return Ok(false);
+        }
+
+        let password_hash = (user.as_ref())
+            .unwrap()
+            .password
+            .as_ref()
+            .ok_or(Errors::PasswordNotSetError)?;
+
+        let is_valid_password = verify_password(pass, &password_hash);
+
+        if !is_valid_password {
+            return Ok(false);
+        } else {
+            return Ok(true);
+        }
     }
 }
 

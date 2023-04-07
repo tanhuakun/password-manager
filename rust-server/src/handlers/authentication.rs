@@ -1,4 +1,4 @@
-use crate::config::ACCESS_TOKEN_TIME_SECONDS;
+use crate::config::{ACCESS_TOKEN_TIME_SECONDS, AUTH_COOKIE_NAME};
 use crate::repository::user_repository::{UserRepository, GOOGLE_PROVIDER, MANUAL_REGISTRATION};
 use crate::utils::jwt_utils::{generate_token, verify_token};
 use crate::utils::totp_utils::{generate_secret_key, generate_totp, generate_totp_url};
@@ -14,7 +14,6 @@ use reqwest::{get, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-pub const AUTH_COOKIE_NAME: &str = "access_token";
 pub const SESSION_PENDING_2FA_KEY: &str = "pending_2fa_id";
 
 #[derive(Serialize)]
@@ -245,10 +244,10 @@ pub async fn check_login(authenticated_user: AuthenticatedUser) -> Result<impl R
 }
 
 /*
-    For verifying 2FA code.
-    Right now there does not seem to be an easy way to test sessions!
-    TODO: Write unit tests for this function.
- */
+   For verifying 2FA code.
+   Right now there does not seem to be an easy way to test sessions!
+   TODO: Write unit tests for this function.
+*/
 #[post("/verify_2fa")]
 pub async fn verify_2fa(
     user_repository: web::Data<dyn UserRepository>,

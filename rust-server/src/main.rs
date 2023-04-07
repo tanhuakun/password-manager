@@ -7,6 +7,7 @@ use handlers::authentication::{
     check_login, disable_2fa, finalise_2fa_secret, get_2fa_url, google_login, login, register,
     verify_2fa,
 };
+use handlers::passwords::{check_master_password_set, set_master_password, verify_master_password};
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use repository::user_repository::{UserRepository, UserRepositoryMain};
 use std::env;
@@ -71,6 +72,12 @@ async fn main() -> std::io::Result<()> {
                             .service(get_2fa_url)
                             .service(finalise_2fa_secret)
                             .service(disable_2fa),
+                    )
+                    .service(
+                        web::scope("/passwords")
+                            .service(check_master_password_set)
+                            .service(set_master_password)
+                            .service(verify_master_password),
                     ),
             )
     })

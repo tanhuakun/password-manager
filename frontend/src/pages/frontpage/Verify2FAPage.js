@@ -1,5 +1,5 @@
 import { post_verify_2fa } from "api/authentication";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
@@ -47,8 +47,8 @@ function Verify2FAPage() {
     <div className="d-flex flex-column h-100 p-3 align-items-center justify-content-center">
       {isRelogin ? (
         <div className="d-flex w-100 p-3 flex-column align-items-center justify-content-center">
-            <p>Timer expired, please relogin</p>
-            <Link to="/">To Login Page</Link>
+          <p>Timer expired, please relogin</p>
+          <Link to="/">To Login Page</Link>
         </div>
       ) : (
         <Form className="w-25 mt-4" onSubmit={submitCode}>
@@ -75,7 +75,12 @@ function Verify2FAPage() {
         </Form>
       )}
       {isLoading && (
-        <Spinner className="mt-4" animation="border" role="status" variant="secondary" />
+        <Spinner
+          className="mt-4"
+          animation="border"
+          role="status"
+          variant="secondary"
+        />
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useLayoutEffect } from "react";
+import React, { useState, useLayoutEffect, useContext } from "react";
 import { useGoogleLogin } from "@react-oauth/google";
 import {
   post_login,
@@ -9,9 +9,12 @@ import { Link, useNavigate } from "react-router-dom";
 import Spinner from "react-bootstrap/Spinner";
 import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
-import { toast } from 'react-toastify';
+import { toast } from "react-toastify";
+import { clientPasswordHash } from "utils/crypto";
+import { UserMasterPasswordContext } from "App";
 
 function LoginPage() {
+  const { setUserMasterPassword } = useContext(UserMasterPasswordContext);
   const NEXT_DASHBOARD = "Dashboard";
   const NEXT_2FA = "2FA";
   const [isLoading, setIsLoading] = useState(false);
@@ -50,7 +53,7 @@ function LoginPage() {
     console.log(res);
     if (res.data.next === NEXT_DASHBOARD) {
       navigate("/home");
-    } else if (res.data.next == NEXT_2FA) {
+    } else if (res.data.next === NEXT_2FA) {
       navigate("/verify_2fa");
     } else {
       toast.error("Something went wrong!");
@@ -64,7 +67,7 @@ function LoginPage() {
         access_token: credentialResponse.access_token,
       });
       if (!res || res.status === 500) {
-        toast.error('Server error!');
+        toast.error("Server error!");
         return;
       }
 
@@ -83,16 +86,17 @@ function LoginPage() {
     if (form.checkValidity() === false) {
       return;
     }
-    console.log(formData);
     setIsLoading(true);
+    const submittedPassword = formData.password;
+    const submittedPasswordHash = await clientPasswordHash(submittedPassword);
     const res = await post_login({
       username: formData.username,
-      password: formData.password,
+      password: submittedPasswordHash,
     });
     setIsLoading(false);
 
     if (!res || res.status === 500) {
-      toast.error('Server error!');
+      toast.error("Server error!");
       return;
     }
 
@@ -100,7 +104,11 @@ function LoginPage() {
       setIsInvalidCredentials(true);
       return;
     }
-
+    setUserMasterPassword(submittedPassword);
+    setFormData({
+      username: "",
+      password: "",
+    });
     handle_login_response(res);
   }
 
@@ -126,11 +134,11 @@ function LoginPage() {
             </Form.Control.Feedback>
           </Form.Group>
           <Form.Group className="mb-3" controlId="formGroupPassword">
-            <Form.Label>Password</Form.Label>
+            <Form.Label>Master Password</Form.Label>
             <Form.Control
               name="password"
               type="password"
-              placeholder="Password"
+              placeholder="Master Password"
               required
               onChange={handleChange}
               isInvalid={isInvalidCredentials}

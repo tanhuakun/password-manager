@@ -4,7 +4,8 @@ import { post_register } from "api/authentication.js";
 import Spinner from "react-bootstrap/Spinner";
 import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
-import { toast } from 'react-toastify';
+import { toast } from "react-toastify";
+import { clientPasswordHash } from "utils/crypto";
 
 function RegisterPage() {
   const [doPasswordsMatch, setDoPasswordsMatch] = useState(true);
@@ -45,20 +46,21 @@ function RegisterPage() {
     }
 
     if (!doPasswordsMatch) {
-      toast.warn('Passwords do not match!');
+      toast.warn("Passwords do not match!");
       return;
     } else if (!formData.username || !formData.password) {
-      toast.warn('Details cannot be empty!');
+      toast.warn("Details cannot be empty!");
       return;
     }
     setIsLoading(true);
+    const submittedPasswordHash = await clientPasswordHash(formData.password);
     const res = await post_register({
       username: formData.username,
-      password: formData.password,
+      password: submittedPasswordHash,
     });
     setIsLoading(false);
     if (!res || res.status === 500) {
-      toast.error('Server error!');
+      toast.error("Server error!");
       return;
     }
 
@@ -100,21 +102,21 @@ function RegisterPage() {
                 </Form.Control.Feedback>
               </Form.Group>
               <Form.Group className="mb-3" controlId="formGroupPassword">
-                <Form.Label>Password</Form.Label>
+                <Form.Label>Master Password</Form.Label>
                 <Form.Control
                   name="password"
                   type="password"
-                  placeholder="Password"
+                  placeholder="Master Password"
                   required
                   onChange={handleChange}
                 />
               </Form.Group>
               <Form.Group className="mb-3" controlId="formGroupConfirmPassword">
-                <Form.Label>Confirm Password</Form.Label>
+                <Form.Label>Confirm Master Password</Form.Label>
                 <Form.Control
                   name="confirm_password"
                   type="password"
-                  placeholder="Confirm Password"
+                  placeholder="Confirm Master Password"
                   required
                   onChange={handleChange}
                   isInvalid={!doPasswordsMatch}
