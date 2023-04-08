@@ -1,10 +1,6 @@
-import React, { useState, useLayoutEffect, useContext } from "react";
+import React, { useState, useContext, useEffect } from "react";
 import { useGoogleLogin } from "@react-oauth/google";
-import {
-  post_login,
-  post_google_login,
-  check_login,
-} from "api/authentication.js";
+import { post_login, post_google_login } from "api/authentication.js";
 import { Link, useNavigate } from "react-router-dom";
 import Spinner from "react-bootstrap/Spinner";
 import Form from "react-bootstrap/Form";
@@ -12,8 +8,10 @@ import Button from "react-bootstrap/Button";
 import { toast } from "react-toastify";
 import { clientPasswordHash } from "utils/crypto";
 import { UserMasterPasswordContext } from "App";
+import { useAuth } from "hooks/useAuth";
 
 function LoginPage() {
+  const { isAuthenticated, setIsAuthenticated } = useAuth();
   const { setUserMasterPassword } = useContext(UserMasterPasswordContext);
   const NEXT_DASHBOARD = "Dashboard";
   const NEXT_2FA = "2FA";
@@ -25,21 +23,11 @@ function LoginPage() {
   });
   const navigate = useNavigate();
 
-  useLayoutEffect(() => {
-    async function check() {
-      let res = await check_login();
-      if (!res) {
-        return;
-      }
-
-      if (res.status === 401) {
-        console.log("Unauthorized");
-        return;
-      }
-
+  useEffect(() => {
+    if (isAuthenticated) {
       navigate("/home");
     }
-    check();
+    // eslint-disable-next-line
   }, []);
 
   function handleChange(e) {
@@ -50,7 +38,7 @@ function LoginPage() {
   }
 
   function handle_login_response(res) {
-    console.log(res);
+    setIsAuthenticated(true);
     if (res.data.next === NEXT_DASHBOARD) {
       navigate("/home");
     } else if (res.data.next === NEXT_2FA) {
