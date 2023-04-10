@@ -7,8 +7,14 @@ use handlers::authentication::{
     check_login, disable_2fa, finalise_2fa_secret, get_2fa_url, google_login, login, register,
     verify_2fa,
 };
-use handlers::passwords::{check_master_password_set, set_master_password, verify_master_password};
+use handlers::passwords::{
+    add_password, check_master_password_set, delete_password, get_passwords, set_master_password,
+    verify_master_password,
+};
 use jsonwebtoken::{DecodingKey, EncodingKey};
+use repository::stored_password_repository::{
+    StoredPasswordRepository, StoredPasswordRepositoryMain,
+};
 use repository::user_repository::{UserRepository, UserRepositoryMain};
 use std::env;
 use std::sync::Arc;
@@ -37,14 +43,22 @@ async fn main() -> std::io::Result<()> {
         .await
         .unwrap();
 
-    let user_repository: Arc<dyn UserRepository> = Arc::new(UserRepositoryMain { conn_pool: pool });
+    let user_repository: Arc<dyn UserRepository> = Arc::new(UserRepositoryMain {
+        conn_pool: pool.clone(),
+    });
     let user_repository_data: web::Data<dyn UserRepository> = web::Data::from(user_repository);
+
+    let stored_password_repository: Arc<dyn StoredPasswordRepository> =
+        Arc::new(StoredPasswordRepositoryMain { conn_pool: pool });
+    let stored_password_repository_data: web::Data<dyn StoredPasswordRepository> =
+        web::Data::from(stored_password_repository);
 
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(encoding_key.clone()))
             .app_data(web::Data::new(decoding_key.clone()))
             .app_data(user_repository_data.clone())
+            .app_data(stored_password_repository_data.clone())
             .wrap(Cors::permissive()) // TODO, change this
             .service(
                 web::scope("/api")
@@ -77,7 +91,10 @@ async fn main() -> std::io::Result<()> {
                         web::scope("/passwords")
                             .service(check_master_password_set)
                             .service(set_master_password)
-                            .service(verify_master_password),
+                            .service(verify_master_password)
+                            .service(add_password)
+                            .service(get_passwords)
+                            .service(delete_password),
                     ),
             )
     })

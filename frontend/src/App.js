@@ -1,6 +1,6 @@
 import "./App.css";
 import LoginPage from "./pages/frontpage/LoginPage";
-import { React, useState, createContext, useEffect } from "react";
+import { React, useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import RegisterPage from "./pages/frontpage/RegisterPage";
 import PasswordMainPage from "./pages/main/passwords/PasswordMainPage";
@@ -13,10 +13,7 @@ import RequireAuthLayout from "components/RequireAuthLayout";
 import { useAuth } from "hooks/useAuth";
 import Spinner from "react-bootstrap/Spinner";
 
-export const UserMasterPasswordContext = createContext(null);
-
 function App() {
-  const [userMasterPassword, setUserMasterPassword] = useState("");
   const { checkUserLoggedIn } = useAuth();
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isAppError, setIsAppError] = useState(false);
@@ -43,32 +40,28 @@ function App() {
 
   return (
     <Router>
-      <UserMasterPasswordContext.Provider
-        value={{ userMasterPassword, setUserMasterPassword }}
-      >
-        {isAppError ? (
-          <div className="d-flex h-100 p-3 flex-column align-items-center justify-content-center text-danger">
-            <div>Error loading resources, please try again later!</div>
-          </div>
-        ) : isLoadingData ? (
-          <div className="d-flex h-100 p-3 flex-column align-items-center justify-content-center">
-            <div>Loading...</div>
-            <Spinner animation="grow" />
-          </div>
-        ) : (
-          <Routes>
-            <Route path="/" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/verify_2fa" element={<Verify2FAPage />} />
-            <Route path="/" element={<RequireAuthLayout />}>
-              <Route path="/" element={<CustomNavbar />}>
-                <Route path="/home" element={<PasswordMainPage />} />
-                <Route path="/2fa" element={<TwoFactorAuthPage />} />
-              </Route>
+      {isAppError ? (
+        <div className="d-flex h-100 p-3 flex-column align-items-center justify-content-center text-danger">
+          <div>Error loading resources, please try again later!</div>
+        </div>
+      ) : isLoadingData ? (
+        <div className="d-flex h-100 p-3 flex-column align-items-center justify-content-center">
+          <div>Loading...</div>
+          <Spinner animation="grow" />
+        </div>
+      ) : (
+        <Routes>
+          <Route path="/" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify_2fa" element={<Verify2FAPage />} />
+          <Route path="/" element={<RequireAuthLayout />}>
+            <Route path="/" element={<CustomNavbar />}>
+              <Route path="/home" element={<PasswordMainPage />} />
+              <Route path="/2fa" element={<TwoFactorAuthPage />} />
             </Route>
-          </Routes>
-        )}
-      </UserMasterPasswordContext.Provider>
+          </Route>
+        </Routes>
+      )}
       <ToastContainer
         position="top-center"
         autoClose={10000}

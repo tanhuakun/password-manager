@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useGoogleLogin } from "@react-oauth/google";
 import { post_login, post_google_login } from "api/authentication.js";
 import { Link, useNavigate } from "react-router-dom";
@@ -7,12 +7,12 @@ import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
 import { toast } from "react-toastify";
 import { clientPasswordHash } from "utils/crypto";
-import { UserMasterPasswordContext } from "App";
 import { useAuth } from "hooks/useAuth";
+import { useMasterPassword } from "hooks/useMasterPassword";
 
 function LoginPage() {
   const { isAuthenticated, setIsAuthenticated } = useAuth();
-  const { setUserMasterPassword } = useContext(UserMasterPasswordContext);
+  const { setMasterPassword } = useMasterPassword();
   const NEXT_DASHBOARD = "Dashboard";
   const NEXT_2FA = "2FA";
   const [isLoading, setIsLoading] = useState(false);
@@ -92,7 +92,7 @@ function LoginPage() {
       setIsInvalidCredentials(true);
       return;
     }
-    setUserMasterPassword(submittedPassword);
+    setMasterPassword(submittedPassword);
     setFormData({
       username: "",
       password: "",

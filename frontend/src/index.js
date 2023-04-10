@@ -6,6 +6,7 @@ import reportWebVitals from "./reportWebVitals";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { AuthProvider } from "hooks/useAuth";
+import { MasterPasswordProvider } from "hooks/useMasterPassword";
 
 const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID;
 
@@ -13,9 +14,11 @@ const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
   <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
     <AuthProvider>
-      <React.StrictMode>
-        <App />
-      </React.StrictMode>
+      <MasterPasswordProvider>
+        <React.StrictMode>
+          <App />
+        </React.StrictMode>
+      </MasterPasswordProvider>
     </AuthProvider>
   </GoogleOAuthProvider>
 );

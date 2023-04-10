@@ -3,16 +3,16 @@ import {
   post_set_master_password,
   post_verify_master_password,
 } from "api/password";
-import { React, useEffect, useState, useContext } from "react";
+import { React, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import Spinner from "react-bootstrap/Spinner";
 import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
-import { UserMasterPasswordContext } from "App";
 import { clientPasswordHash } from "utils/crypto";
+import { useMasterPassword } from "hooks/useMasterPassword";
 
 function SetPasswordPage() {
-  const { setUserMasterPassword } = useContext(UserMasterPasswordContext);
+  const { setMasterPassword } = useMasterPassword();
   const [hasUserSetPassword, setHasUserSetPassword] = useState(false);
   const [doPasswordsMatch, setDoPasswordsMatch] = useState(true);
   const [isFetchingMasterPassword, setIsFetchingMasterPassword] =
@@ -98,7 +98,7 @@ function SetPasswordPage() {
       return;
     }
     setFormPassword("");
-    setUserMasterPassword(submittedPassword);
+    setMasterPassword(submittedPassword);
   }
 
   async function updatePassword(event) {

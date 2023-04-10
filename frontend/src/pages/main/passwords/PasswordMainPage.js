@@ -1,14 +1,14 @@
-import { React, useContext } from "react";
+import { React } from "react";
 import PasswordTablePage from "./PasswordTablePage";
 import SetPasswordPage from "./SetPasswordPage";
-import { UserMasterPasswordContext } from "App";
+import { useMasterPassword } from "hooks/useMasterPassword";
 
 function PasswordMainPage() {
-  const { userMasterPassword } = useContext(UserMasterPasswordContext);
+  const { masterPassword } = useMasterPassword();
 
   return (
     <div className="w-100 h-100 d-flex d-flex align-items-center justify-content-center">
-      {userMasterPassword ? <PasswordTablePage /> : <SetPasswordPage />}
+      {masterPassword ? <PasswordTablePage /> : <SetPasswordPage />}
     </div>
   );
 }

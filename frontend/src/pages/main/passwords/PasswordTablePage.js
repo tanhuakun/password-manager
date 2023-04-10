@@ -1,99 +1,132 @@
-import React from "react";
-import { useTable } from "react-table";
-import { PencilFill, TrashFill } from "react-bootstrap-icons";
+import React, { useState, useEffect } from "react";
+import PasswordItem from "./components/PasswordItem";
+import AddPasswordModal from "./components/AddPasswordModal";
+import DeletePasswordModal from "./components/DeletePasswordModal";
+import { Button, InputGroup, Accordion, Form, Spinner } from "react-bootstrap";
+import { get_passwords } from "api/password";
+import { toast } from "react-toastify";
+import { useMasterPassword } from "hooks/useMasterPassword";
+import { decryptPassword } from "utils/crypto";
 
 function PasswordTablePage() {
-  const data = React.useMemo(
-    () => [
-      {
-        name: "google",
-        password: "12345",
-      },
-      {
-        name: "facebook",
-        password: "!2345",
-      },
-    ],
-    []
-  );
+  const [filterString, setFilterString] = useState("");
+  const [passwordArray, setPasswordArray] = useState([]);
+  const [isAddPasswordModalOpen, setIsAddPasswordModalOpen] = useState(false);
+  const [isDeletePasswordModalOpen, setIsDeletePasswordModalOpen] =
+    useState(false);
+  const [selectedPasswordObj, setSelectedPasswordObj] = useState(null);
+  const [isFetchingPasswords, setIsFetchingPasswords] = useState(true);
+  const { masterPassword } = useMasterPassword();
 
-  const columns = React.useMemo(
-    () => [
-      {
-        Header: "Name",
-        accessor: "name", // accessor is the "key" in the data
-      },
-      {
-        Header: "Password",
-        accessor: "password",
-      },
-      {
-        Header: "Actions",
-        Cell: ({ cell }) => (
-          <div>
-            <PencilFill onClick={() => console.log(cell)}></PencilFill>
-            <TrashFill></TrashFill>
-          </div>
-        ),
-      },
-    ],
-    []
-  );
+  const passwordsDiv = passwordArray
+    .filter((x) => x.purpose.toLowerCase().includes(filterString))
+    .sort((a, b) => {
+      if (a.purpose < b.purpose) {
+        return -1;
+      } else {
+        return 1;
+      }
+    })
+    .map((storedPasswordObj) => (
+      <PasswordItem
+        key={storedPasswordObj.id}
+        storedPassword={storedPasswordObj}
+        removePasswordById={removePasswordFromList}
+        openDeletePasswordModal={openDeletePasswordModal}
+      />
+    ));
 
-  const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow } =
-    useTable({ columns, data });
+  async function fetchPasswords() {
+    let res = await get_passwords();
+    if (!res || res.status === 500) {
+      toast.error("Server error!");
+      return;
+    }
+    let decryptedPasswords = await Promise.all(
+      res.data.map(async (x) => {
+        x.password = await decryptPassword(masterPassword, x.password);
+        return x;
+      })
+    );
+    setPasswordArray(decryptedPasswords);
+    setIsFetchingPasswords(false);
+  }
+
+  useEffect(() => {
+    fetchPasswords();
+    // eslint-disable-next-line
+  }, []);
+
+  function openAddPasswordModal() {
+    setIsAddPasswordModalOpen(true);
+  }
+  function closeAddPasswordModal() {
+    setIsAddPasswordModalOpen(false);
+  }
+
+  function openDeletePasswordModal(obj) {
+    setSelectedPasswordObj(obj);
+    setIsDeletePasswordModalOpen(true);
+  }
+  function closeDeletePasswordModal() {
+    setIsDeletePasswordModalOpen(false);
+  }
+
+  function addPasswordToList(storedPasswordObj) {
+    setPasswordArray([...passwordArray, storedPasswordObj]);
+  }
+
+  function removePasswordFromList(id) {
+    setPasswordArray(passwordArray.filter((x) => x.id !== id));
+  }
+
+  function checkPurposeExists(purpose) {
+    return passwordArray.find((x) => x.purpose === purpose) !== undefined;
+  }
 
   return (
-    <div className="px-4">
-      <h6 className="display-6">Passwords</h6>
-      <table
-        {...getTableProps()}
-        className="w-100"
-        style={{ border: "solid 1px grey" }}
-      >
-        <thead>
-          {headerGroups.map((headerGroup) => (
-            <tr {...headerGroup.getHeaderGroupProps()}>
-              {headerGroup.headers.map((column) => (
-                <th
-                  {...column.getHeaderProps()}
-                  style={{
-                    border: "solid 1px grey",
-                    background: "white",
-                    color: "black",
-                    fontWeight: "bold",
-                  }}
-                >
-                  {column.render("Header")}
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody {...getTableBodyProps()}>
-          {rows.map((row) => {
-            prepareRow(row);
-            return (
-              <tr {...row.getRowProps()}>
-                {row.cells.map((cell) => {
-                  return (
-                    <td
-                      {...cell.getCellProps()}
-                      style={{
-                        padding: "10px",
-                        border: "solid 1px gray",
-                        background: "aliceblue",
-                      }}
-                    >
-                      {cell.render("Cell")}
-                    </td>
-                  );
-                })}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="w-100">
+      {isFetchingPasswords ? (
+        <div className="d-flex w-100 p-3 flex-column align-items-center justify-content-center">
+          <div className="text-center">Loading...</div>
+          <Spinner
+            className="mt-4"
+            animation="border"
+            role="status"
+            variant="secondary"
+          />
+        </div>
+      ) : (
+        <div className="d-flex w-100 p-3 flex-column align-items-center justify-content-center">
+          <h6 className="display-6 w-75">Passwords</h6>
+          <div className="w-75 mb-2 d-flex flex-row justify-content-between">
+            <AddPasswordModal
+              show={isAddPasswordModalOpen}
+              handleClose={closeAddPasswordModal}
+              checkPurposeExists={checkPurposeExists}
+              addPassword={addPasswordToList}
+            />
+            <DeletePasswordModal
+              show={isDeletePasswordModalOpen}
+              handleClose={closeDeletePasswordModal}
+              passwordObj={selectedPasswordObj}
+              removePasswordFromList={removePasswordFromList}
+            />
+            <Button onClick={openAddPasswordModal} variant="primary">
+              Add Password
+            </Button>
+            <InputGroup className="w-50">
+              <Form.Control
+                placeholder="Search"
+                aria-label="Default"
+                aria-describedby="inputGroup-sizing-default"
+                onChange={(x) => setFilterString(x.target.value.toLowerCase())}
+              />
+            </InputGroup>
+          </div>
+          <Accordion className="w-75">{passwordsDiv}</Accordion>
+        </div>
+      )}
     </div>
   );
 }

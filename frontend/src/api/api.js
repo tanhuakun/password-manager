@@ -34,4 +34,14 @@ async function make_get(route, params) {
   }
 }
 
-export { make_post, make_get, make_put };
+async function make_delete(route) {
+  try {
+    const res = await axios.delete(API_URL + route);
+    return res;
+  } catch (error) {
+    console.log(error);
+    return error.response;
+  }
+}
+
+export { make_post, make_get, make_put, make_delete };

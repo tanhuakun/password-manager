@@ -1,6 +1,15 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    stored_passwords (id) {
+        id -> Integer,
+        user_id -> Integer,
+        purpose -> Varchar,
+        password -> Varchar,
+    }
+}
+
+diesel::table! {
     users (id) {
         id -> Integer,
         username -> Varchar,
@@ -20,4 +29,4 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(users, users_oauth,);
+diesel::allow_tables_to_appear_in_same_query!(stored_passwords, users, users_oauth,);
