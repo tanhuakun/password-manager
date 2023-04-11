@@ -13,7 +13,7 @@ async function post_google_login(details) {
 }
 
 async function check_login() {
-  return await make_get("/auth/check_login", {});
+  return await make_get("/auth/is_login", {});
 }
 
 async function post_verify_2fa(details) {

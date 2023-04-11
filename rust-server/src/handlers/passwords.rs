@@ -16,7 +16,7 @@ pub struct StoredPasswordDetails {
     password: String,
 }
 
-#[get("/check_master_password_set")]
+#[get("/is_master_password_set")]
 pub async fn check_master_password_set(
     user_repository: web::Data<dyn UserRepository>,
     authenticated_user: AuthenticatedUser,
@@ -38,7 +38,7 @@ pub async fn check_master_password_set(
     Ok(HttpResponse::Ok().json(json!({ "result": result })))
 }
 
-#[post("/set_master_password")]
+#[post("/master_password")]
 pub async fn set_master_password(
     user_repository: web::Data<dyn UserRepository>,
     authenticated_user: AuthenticatedUser,
@@ -112,7 +112,7 @@ pub async fn get_passwords(
     Ok(HttpResponse::Ok().json(stored_passwords))
 }
 
-#[post("/add_password")]
+#[post("/password")]
 pub async fn add_password(
     stored_password_repository: web::Data<dyn StoredPasswordRepository>,
     authenticated_user: AuthenticatedUser,
@@ -369,7 +369,7 @@ mod tests {
             web::Data::from(stored_password_repository);
 
         let req = test::TestRequest::get()
-            .uri("/check_master_password_set")
+            .uri("/is_master_password_set")
             .cookie(build_auth_cookie());
 
         let resp =
@@ -392,7 +392,7 @@ mod tests {
             web::Data::from(stored_password_repository);
 
         let req = test::TestRequest::get()
-            .uri("/check_master_password_set")
+            .uri("/is_master_password_set")
             .cookie(build_auth_cookie());
 
         let resp =
@@ -414,7 +414,7 @@ mod tests {
             web::Data::from(stored_password_repository);
 
         let req = test::TestRequest::post()
-            .uri("/set_master_password")
+            .uri("/master_password")
             .set_json(json!({
                 "password": "123456"
             }))
@@ -435,7 +435,7 @@ mod tests {
         let stored_password_repository_data: web::Data<dyn StoredPasswordRepository> =
             web::Data::from(stored_password_repository);
         let req = test::TestRequest::post()
-            .uri("/set_master_password")
+            .uri("/master_password")
             .set_json(json!({
                 "password": "123456"
             }))
@@ -543,7 +543,7 @@ mod tests {
             web::Data::from(stored_password_repository);
 
         let req = test::TestRequest::post()
-            .uri("/add_password")
+            .uri("/password")
             .set_json(json!({
                 "purpose": "Test",
                 "password": "123456"
@@ -576,7 +576,7 @@ mod tests {
             web::Data::from(stored_password_repository);
 
         let req = test::TestRequest::post()
-            .uri("/add_password")
+            .uri("/password")
             .set_json(json!({
                 "purpose": "Test",
                 "password": "123456"

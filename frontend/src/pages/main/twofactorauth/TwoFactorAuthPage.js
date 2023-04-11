@@ -1,7 +1,7 @@
 import {
   get_2fa_url,
   post_finalise_2fa_secret,
-  put_disable_2fa,
+  delete_2fa_enabled,
 } from "api/setup2fa";
 import { useEffect, useState } from "react";
 import QRCode from "react-qr-code";
@@ -94,7 +94,7 @@ function TwoFactorAuthPage() {
     }
 
     setIsLoadingRequest(true);
-    let res = await put_disable_2fa();
+    let res = await delete_2fa_enabled();
     setIsLoadingRequest(false);
 
     if (!res || res.status === 500) {

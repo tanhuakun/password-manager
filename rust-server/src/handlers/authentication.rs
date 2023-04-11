@@ -3,10 +3,11 @@ use crate::repository::user_repository::{UserRepository, GOOGLE_PROVIDER, MANUAL
 use crate::utils::jwt_utils::{generate_token, verify_token};
 use crate::utils::totp_utils::{generate_secret_key, generate_totp, generate_totp_url};
 use actix_session::Session;
+use actix_web::delete;
 use actix_web::{
     cookie::{Cookie, SameSite},
     dev::Payload,
-    get, post, put, web, Error, FromRequest, HttpRequest, HttpResponse, Responder, Result,
+    get, post, web, Error, FromRequest, HttpRequest, HttpResponse, Responder, Result,
 };
 use futures_util::future::{ready, Ready};
 use jsonwebtoken::{DecodingKey, EncodingKey};
@@ -236,7 +237,7 @@ pub async fn google_login(
     generate_success_login_response(user_id, totp_enabled, encoding_key, session)
 }
 
-#[get("/check_login")]
+#[get("/is_login")]
 pub async fn check_login(authenticated_user: AuthenticatedUser) -> Result<impl Responder> {
     Ok(HttpResponse::Ok().json(json!({
         "user_id" : authenticated_user.user_id
@@ -320,7 +321,7 @@ pub async fn get_2fa_url(
     Ok(HttpResponse::Ok().json(json!({ "url": url })))
 }
 
-#[post("/finalise_2fa_secret")]
+#[post("/2fa_secret")]
 pub async fn finalise_2fa_secret(
     user_repository: web::Data<dyn UserRepository>,
     authenticated_user: AuthenticatedUser,
@@ -357,7 +358,7 @@ pub async fn finalise_2fa_secret(
     Ok(HttpResponse::Ok().finish())
 }
 
-#[put("/disable_2fa")]
+#[delete("/2fa_enabled")]
 pub async fn disable_2fa(
     user_repository: web::Data<dyn UserRepository>,
     authenticated_user: AuthenticatedUser,
@@ -423,6 +424,8 @@ mod tests {
                 username: String::from("Test"),
                 password: Some(String::from("Test")),
                 registration_type: String::from(MANUAL_REGISTRATION),
+                totp_enabled: false,
+                totp_base32: None,
             });
         }
     }
@@ -660,7 +663,7 @@ mod tests {
         let auth_token = generate_token(1, &encoding_key).unwrap();
 
         let req = test::TestRequest::get()
-            .uri("/check_login")
+            .uri("/is_login")
             .cookie(
                 Cookie::build(AUTH_COOKIE_NAME, auth_token)
                     .http_only(true)
@@ -687,7 +690,7 @@ mod tests {
         .await;
 
         let req = test::TestRequest::get()
-            .uri("/check_login")
+            .uri("/is_login")
             .cookie(
                 Cookie::build(AUTH_COOKIE_NAME, "fake_token")
                     .http_only(true)
@@ -784,7 +787,7 @@ mod tests {
         let auth_token = generate_token(1, &encoding_key).unwrap();
 
         let req = test::TestRequest::post()
-            .uri("/finalise_2fa_secret")
+            .uri("/2fa_secret")
             .set_json(json!({
                 "code": "123456"
             }))
@@ -839,7 +842,7 @@ mod tests {
         let code2 = generate_totp(base32_secret.to_owned());
 
         let req2 = test::TestRequest::post()
-            .uri("/finalise_2fa_secret")
+            .uri("/2fa_secret")
             .set_json(json!({ "code": code2 }))
             .cookie(
                 Cookie::build(AUTH_COOKIE_NAME, auth_token)

@@ -1,11 +1,11 @@
 import { make_post, make_get, make_delete } from "./api.js";
 
 async function get_check_master_password() {
-  return await make_get("/passwords/check_master_password_set", {});
+  return await make_get("/passwords/is_master_password_set", {});
 }
 
 async function post_set_master_password(details) {
-  return await make_post("/passwords/set_master_password", details);
+  return await make_post("/passwords/master_password", details);
 }
 
 async function post_verify_master_password(details) {
@@ -13,7 +13,7 @@ async function post_verify_master_password(details) {
 }
 
 async function post_add_password(details) {
-  return await make_post("/passwords/add_password", details);
+  return await make_post("/passwords/password", details);
 }
 
 async function get_passwords() {

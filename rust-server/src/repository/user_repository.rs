@@ -179,6 +179,8 @@ impl UserRepository for UserRepositoryMain {
             username: usrname.to_owned(),
             password: hashed_password,
             registration_type: registratio_type.to_owned(),
+            totp_enabled: false,
+            totp_base32: None,
         };
 
         let mut conn = self.conn_pool.get().expect(ERR_POOL_CANNOT_GET_CONNECTION);
@@ -206,6 +208,8 @@ impl UserRepository for UserRepositoryMain {
                 username: usrname.to_owned(),
                 password: None,
                 registration_type: OAUTH_REGISTRATION.to_owned(),
+                totp_enabled: false,
+                totp_base32: None
             };
 
             diesel::insert_into(users).values(&new_user).execute(conn)?;
