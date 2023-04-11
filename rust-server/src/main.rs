@@ -1,4 +1,5 @@
 use actix_cors::Cors;
+use actix_governor::{Governor, GovernorConfigBuilder};
 use actix_session::{config::PersistentSession, storage::RedisSessionStore, SessionMiddleware};
 use actix_web::{cookie::Key, web, App, HttpServer};
 use database::create_db_pool;
@@ -43,6 +44,13 @@ async fn main() -> std::io::Result<()> {
         .await
         .unwrap();
 
+    let governor_conf = GovernorConfigBuilder::default()
+        .per_second(2)
+        .burst_size(5)
+        .finish()
+        .unwrap();
+
+
     let user_repository: Arc<dyn UserRepository> = Arc::new(UserRepositoryMain {
         conn_pool: pool.clone(),
     });
@@ -64,6 +72,7 @@ async fn main() -> std::io::Result<()> {
                 web::scope("/api")
                     .service(
                         web::scope("/auth")
+                            .wrap(Governor::new(&governor_conf))
                             .wrap(
                                 SessionMiddleware::builder(
                                     store.clone(),
