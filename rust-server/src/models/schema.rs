@@ -17,6 +17,7 @@ diesel::table! {
         registration_type -> Varchar,
         totp_enabled -> Bool,
         totp_base32 -> Nullable<Varchar>,
+        token_revoked_time -> Bigint,
     }
 }
 

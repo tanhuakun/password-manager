@@ -90,6 +90,10 @@ pub trait UserRepository: Send + Sync {
     fn check_user_password(&self, _usr_id: i32, _pass: &str) -> Result<bool, DbError> {
         unimplemented!()
     }
+
+    fn update_token_revoked_time(&self, _usr_id: i32, _new_time: i64) -> Result<(), DbError> {
+        unimplemented!()
+    }
 }
 
 pub struct UserRepositoryMain {
@@ -209,7 +213,7 @@ impl UserRepository for UserRepositoryMain {
                 password: None,
                 registration_type: OAUTH_REGISTRATION.to_owned(),
                 totp_enabled: false,
-                totp_base32: None
+                totp_base32: None,
             };
 
             diesel::insert_into(users).values(&new_user).execute(conn)?;
@@ -307,6 +311,17 @@ impl UserRepository for UserRepositoryMain {
         } else {
             return Ok(true);
         }
+    }
+
+    fn update_token_revoked_time(&self, usr_id: i32, new_time: i64) -> Result<(), DbError> {
+        use crate::models::schema::users::dsl::*;
+
+        let mut conn = self.conn_pool.get().expect(ERR_POOL_CANNOT_GET_CONNECTION);
+        diesel::update(users)
+            .filter(id.eq(usr_id))
+            .set(token_revoked_time.eq(new_time))
+            .execute(&mut conn)?;
+        Ok(())
     }
 }
 

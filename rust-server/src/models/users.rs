@@ -9,6 +9,7 @@ pub struct User {
     pub registration_type: String,
     pub totp_enabled: bool,
     pub totp_base32: Option<String>,
+    pub token_revoked_time: i64,
 }
 
 use super::schema::users;

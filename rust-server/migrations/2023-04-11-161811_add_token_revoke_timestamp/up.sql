@@ -1,0 +1,2 @@
+ALTER TABLE users
+ADD COLUMN token_revoked_time BIGINT NOT NULL DEFAULT 0;

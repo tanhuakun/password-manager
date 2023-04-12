@@ -5,8 +5,8 @@ use actix_web::{cookie::Key, web, App, HttpServer};
 use database::create_db_pool;
 use dotenvy::dotenv;
 use handlers::authentication::{
-    check_login, disable_2fa, finalise_2fa_secret, get_2fa_url, google_login, login, register,
-    verify_2fa,
+    check_login, disable_2fa, finalise_2fa_secret, get_2fa_url, get_new_access_token, google_login,
+    login, logout, register, verify_2fa,
 };
 use handlers::passwords::{
     add_password, check_master_password_set, delete_password, get_passwords, set_master_password,
@@ -50,7 +50,6 @@ async fn main() -> std::io::Result<()> {
         .finish()
         .unwrap();
 
-
     let user_repository: Arc<dyn UserRepository> = Arc::new(UserRepositoryMain {
         conn_pool: pool.clone(),
     });
@@ -88,7 +87,9 @@ async fn main() -> std::io::Result<()> {
                             .service(login)
                             .service(register)
                             .service(check_login)
-                            .service(verify_2fa),
+                            .service(verify_2fa)
+                            .service(get_new_access_token)
+                            .service(logout),
                     )
                     .service(
                         web::scope("/2fa")

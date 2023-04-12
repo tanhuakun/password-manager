@@ -20,4 +20,15 @@ async function post_verify_2fa(details) {
   return await make_post("/auth/verify_2fa", details);
 }
 
-export { post_login, post_register, post_google_login, check_login, post_verify_2fa};
+async function post_logout() {
+  return await make_post("/auth/logout");
+}
+
+export {
+  post_login,
+  post_register,
+  post_google_login,
+  check_login,
+  post_verify_2fa,
+  post_logout,
+};

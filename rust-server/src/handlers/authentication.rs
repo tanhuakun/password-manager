@@ -1,14 +1,16 @@
-use crate::config::{ACCESS_TOKEN_TIME_SECONDS, AUTH_COOKIE_NAME};
+use crate::config::{AUTH_COOKIE_NAME, REFRESH_COOKIE_NAME, REFRESH_TOKEN_TIME_SECONDS};
 use crate::repository::user_repository::{UserRepository, GOOGLE_PROVIDER, MANUAL_REGISTRATION};
-use crate::utils::jwt_utils::{generate_token, verify_token};
+use crate::utils::jwt_utils::{
+    self, generate_access_token, generate_refresh_token, verify_access_token, verify_refresh_token,
+};
 use crate::utils::totp_utils::{generate_secret_key, generate_totp, generate_totp_url};
 use actix_session::Session;
-use actix_web::delete;
 use actix_web::{
     cookie::{Cookie, SameSite},
     dev::Payload,
     get, post, web, Error, FromRequest, HttpRequest, HttpResponse, Responder, Result,
 };
+use actix_web::{delete, HttpResponseBuilder};
 use futures_util::future::{ready, Ready};
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use reqwest::{get, Url};
@@ -62,8 +64,14 @@ impl FromRequest for AuthenticatedUser {
         if let Some(cookie_value) = cookie {
             let token = cookie_value.value();
 
-            let jwt_claims =
-                verify_token(&token, decoding_key).map_err(actix_web::error::ErrorUnauthorized);
+            let jwt_claims = verify_access_token(&token, decoding_key).map_err(|e| match e {
+                jwt_utils::Errors::TokenExpired => {
+                    return Error::from(actix_web::error::ErrorUnauthorized("TokenExpired"));
+                }
+                _ => {
+                    return Error::from(actix_web::error::ErrorUnauthorized("Unauthorized"));
+                }
+            });
 
             let result = jwt_claims.map(|claim| AuthenticatedUser {
                 user_id: claim.user_id,
@@ -74,6 +82,38 @@ impl FromRequest for AuthenticatedUser {
             "Unauthorized",
         ))))
     }
+}
+
+fn generate_cookies_response_builder(
+    user_id: i32,
+    encoding_key: &EncodingKey,
+) -> Result<HttpResponseBuilder> {
+    let auth_token = generate_access_token(user_id, &encoding_key)
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    let refresh_token = generate_refresh_token(user_id, &encoding_key)
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    let access_token_cookie = Cookie::build(AUTH_COOKIE_NAME, auth_token)
+        .http_only(true)
+        .path("/")
+        .max_age(time::Duration::seconds(REFRESH_TOKEN_TIME_SECONDS)) // so that access token will be deemed as expired when refresh token is still available
+        .same_site(SameSite::None) // TODO require better security.
+        .finish();
+
+    let refresh_token_cookie = Cookie::build(REFRESH_COOKIE_NAME, refresh_token)
+        .http_only(true)
+        .path("/")
+        .max_age(time::Duration::seconds(REFRESH_TOKEN_TIME_SECONDS))
+        .same_site(SameSite::None) // TODO require better security.
+        .finish();
+
+    let mut response = HttpResponse::Ok();
+
+    Ok(response
+        .cookie(access_token_cookie)
+        .cookie(refresh_token_cookie)
+        .take())
 }
 
 fn generate_success_login_response(
@@ -89,21 +129,13 @@ fn generate_success_login_response(
             "next": "2FA"
         })));
     } else {
-        let auth_token = generate_token(user_id, &encoding_key)
-            .map_err(actix_web::error::ErrorInternalServerError)?;
+        let response_builder_res = generate_cookies_response_builder(user_id, &encoding_key);
 
-        let mut response = HttpResponse::Ok();
-
-        let cookie = Cookie::build(AUTH_COOKIE_NAME, auth_token)
-            .http_only(true)
-            .path("/")
-            .max_age(time::Duration::seconds(ACCESS_TOKEN_TIME_SECONDS))
-            .same_site(SameSite::None) // TODO require better security.
-            .finish();
-
-        return Ok(response.cookie(cookie).json(json!({
-            "next": "Dashboard"
-        })));
+        return response_builder_res.map(|mut builder| {
+            builder.json(json!({
+                "next": "Dashboard"
+            }))
+        });
     }
 }
 
@@ -373,6 +405,83 @@ pub async fn disable_2fa(
     Ok(HttpResponse::Ok().finish())
 }
 
+#[get("/access_token")]
+pub async fn get_new_access_token(
+    req: HttpRequest,
+    user_repository: web::Data<dyn UserRepository>,
+    encoding_key: web::Data<EncodingKey>,
+    decoding_key: web::Data<DecodingKey>,
+) -> Result<impl Responder> {
+    let cookie = req.cookie(REFRESH_COOKIE_NAME);
+
+    if cookie.is_none() {
+        return Ok(HttpResponse::Unauthorized().finish());
+    }
+
+    let cookie_value = cookie.unwrap();
+    let token = cookie_value.value();
+
+    let jwt_refresh_claims = verify_refresh_token(&token, &decoding_key);
+
+    if jwt_refresh_claims.is_err() {
+        return Ok(HttpResponse::Unauthorized().finish());
+    }
+
+    let jwt_refresh_claims = jwt_refresh_claims.unwrap();
+
+    let user_id = jwt_refresh_claims.user_id;
+
+    let user_repository_clone = user_repository.clone();
+    let user = web::block(move || user_repository_clone.find_user_by_id(user_id))
+        .await?
+        .map_err(actix_web::error::ErrorInternalServerError)?
+        .unwrap();
+
+    if jwt_refresh_claims.iat < user.token_revoked_time {
+        return Ok(HttpResponse::Unauthorized().finish());
+    }
+
+    let response_builder_res = generate_cookies_response_builder(user_id, &encoding_key);
+    let new_token_revoked_time = chrono::Utc::now().timestamp() - 1;
+    web::block(move || user_repository.update_token_revoked_time(user_id, new_token_revoked_time))
+        .await?
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    response_builder_res.map(|mut builder| builder.finish())
+}
+
+#[post("/logout")]
+pub async fn logout(
+    authenticated_user: AuthenticatedUser,
+    user_repository: web::Data<dyn UserRepository>,
+) -> Result<impl Responder> {
+    let user_id = authenticated_user.user_id;
+
+    // revoke refresh token in db
+    let new_token_revoked_time = chrono::Utc::now().timestamp() - 1;
+    web::block(move || user_repository.update_token_revoked_time(user_id, new_token_revoked_time))
+        .await?
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    // delete cookies!
+    Ok(HttpResponse::Ok()
+        .cookie(
+            Cookie::build(AUTH_COOKIE_NAME, "")
+                .http_only(true)
+                .path("/")
+                .max_age(time::Duration::seconds(0))
+                .finish(),
+        )
+        .cookie(
+            Cookie::build(REFRESH_COOKIE_NAME, "")
+                .http_only(true)
+                .path("/")
+                .max_age(time::Duration::seconds(0))
+                .finish(),
+        )
+        .finish())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -398,6 +507,7 @@ mod tests {
                 registration_type: String::from(MANUAL_REGISTRATION),
                 totp_enabled: false,
                 totp_base32: None,
+                token_revoked_time: 0,
             }));
         }
     }
@@ -440,6 +550,7 @@ mod tests {
                 registration_type: String::from(MANUAL_REGISTRATION),
                 totp_enabled: false,
                 totp_base32: None,
+                token_revoked_time: 0,
             }));
         }
     }
@@ -463,6 +574,7 @@ mod tests {
                 registration_type: String::from(MANUAL_REGISTRATION),
                 totp_enabled: true,
                 totp_base32: None,
+                token_revoked_time: 0,
             }));
         }
     }
@@ -478,6 +590,7 @@ mod tests {
                 registration_type: String::from(MANUAL_REGISTRATION),
                 totp_enabled: false,
                 totp_base32: None,
+                token_revoked_time: 0,
             }));
         }
 
@@ -503,6 +616,7 @@ mod tests {
                 registration_type: String::from(MANUAL_REGISTRATION),
                 totp_enabled: false,
                 totp_base32: Some(self.base32_secret.clone()),
+                token_revoked_time: 0,
             }));
         }
 
@@ -521,6 +635,58 @@ mod tests {
         ) -> std::result::Result<(), DbError> {
             Ok(())
         }
+    }
+
+    pub struct UserRepositoryGetAccessTokenStub {
+        token_revoked_time: i64,
+    }
+
+    impl UserRepository for UserRepositoryGetAccessTokenStub {
+        fn find_user_by_id(&self, _user_id: i32) -> std::result::Result<Option<User>, DbError> {
+            return Ok(Some(User {
+                id: 1,
+                username: String::from("Test"),
+                password: Some(String::from("Test")),
+                registration_type: String::from(MANUAL_REGISTRATION),
+                totp_enabled: false,
+                totp_base32: None,
+                token_revoked_time: self.token_revoked_time,
+            }));
+        }
+
+        fn update_token_revoked_time(
+            &self,
+            _usr_id: i32,
+            _new_time: i64,
+        ) -> std::result::Result<(), DbError> {
+            Ok(())
+        }
+    }
+
+    pub struct UserRepositoryLogoutSuccessStub {}
+
+    impl UserRepository for UserRepositoryLogoutSuccessStub {
+        fn update_token_revoked_time(
+            &self,
+            _usr_id: i32,
+            _new_time: i64,
+        ) -> std::result::Result<(), DbError> {
+            Ok(())
+        }
+    }
+
+    fn get_cookies_value(cookies: Vec<String>, cookie_name: &str) -> String {
+        cookies
+            .iter()
+            .find(|s| s.starts_with(cookie_name))
+            .unwrap()
+            .split_once("=")
+            .unwrap()
+            .1
+            .split_once(";")
+            .unwrap()
+            .0
+            .to_owned()
     }
 
     #[actix_web::test]
@@ -604,18 +770,9 @@ mod tests {
             .get_all(http::header::SET_COOKIE)
             .map(|v| v.to_str().unwrap().to_owned())
             .collect();
-        let auth_token = cookies
-            .iter()
-            .find(|s| s.starts_with(AUTH_COOKIE_NAME))
-            .unwrap()
-            .split_once("=")
-            .unwrap()
-            .1
-            .split_once(";")
-            .unwrap()
-            .0;
+        let auth_token = get_cookies_value(cookies, AUTH_COOKIE_NAME);
         assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
-        assert!(verify_token(auth_token, &decoding_key).is_ok());
+        assert!(verify_access_token(&auth_token, &decoding_key).is_ok());
     }
 
     #[actix_web::test]
@@ -660,7 +817,7 @@ mod tests {
         )
         .await;
 
-        let auth_token = generate_token(1, &encoding_key).unwrap();
+        let auth_token = generate_access_token(1, &encoding_key).unwrap();
 
         let req = test::TestRequest::get()
             .uri("/is_login")
@@ -719,7 +876,7 @@ mod tests {
         )
         .await;
 
-        let auth_token = generate_token(1, &encoding_key).unwrap();
+        let auth_token = generate_access_token(1, &encoding_key).unwrap();
 
         let req = test::TestRequest::get()
             .uri("/2fa_url")
@@ -752,7 +909,7 @@ mod tests {
         )
         .await;
 
-        let auth_token = generate_token(1, &encoding_key).unwrap();
+        let auth_token = generate_access_token(1, &encoding_key).unwrap();
 
         let req = test::TestRequest::get()
             .uri("/2fa_url")
@@ -784,7 +941,7 @@ mod tests {
         )
         .await;
 
-        let auth_token = generate_token(1, &encoding_key).unwrap();
+        let auth_token = generate_access_token(1, &encoding_key).unwrap();
 
         let req = test::TestRequest::post()
             .uri("/2fa_secret")
@@ -823,7 +980,7 @@ mod tests {
         )
         .await;
 
-        let auth_token = generate_token(1, &encoding_key).unwrap();
+        let auth_token = generate_access_token(1, &encoding_key).unwrap();
 
         let code1 = generate_totp(base32_secret.to_owned());
 
@@ -859,5 +1016,131 @@ mod tests {
         let check2 = resp2.status() == actix_web::http::StatusCode::OK;
 
         assert!(check1 || check2);
+    }
+
+    #[actix_web::test]
+    async fn get_new_access_token_revoked_test() {
+        let jwt_secret = "1qGpT9oS0dChQ287Ve1Uyha6CRG3nqGI";
+        let encoding_key = EncodingKey::from_secret(jwt_secret.as_bytes());
+        let decoding_key = DecodingKey::from_secret(jwt_secret.as_bytes());
+
+        let refresh_token = generate_refresh_token(1, &encoding_key).unwrap();
+
+        let user_repository: Arc<dyn UserRepository> = Arc::new(UserRepositoryGetAccessTokenStub {
+            token_revoked_time: chrono::Utc::now().timestamp() + 5,
+        });
+        let user_repository_data: web::Data<dyn UserRepository> = web::Data::from(user_repository);
+
+        let app = test::init_service(
+            App::new()
+                .service(get_new_access_token)
+                .app_data(user_repository_data)
+                .app_data(web::Data::new(encoding_key.clone()))
+                .app_data(web::Data::new(decoding_key.clone())),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/access_token")
+            .cookie(
+                Cookie::build(REFRESH_COOKIE_NAME, refresh_token)
+                    .http_only(true)
+                    .finish(),
+            )
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[actix_web::test]
+    async fn get_new_access_token_success_test() {
+        let jwt_secret = "1qGpT9oS0dChQ287Ve1Uyha6CRG3nqGI";
+        let encoding_key = EncodingKey::from_secret(jwt_secret.as_bytes());
+        let decoding_key = DecodingKey::from_secret(jwt_secret.as_bytes());
+
+        let refresh_token = generate_refresh_token(1, &encoding_key).unwrap();
+
+        let user_repository: Arc<dyn UserRepository> = Arc::new(UserRepositoryGetAccessTokenStub {
+            token_revoked_time: chrono::Utc::now().timestamp() - 5,
+        });
+        let user_repository_data: web::Data<dyn UserRepository> = web::Data::from(user_repository);
+
+        let app = test::init_service(
+            App::new()
+                .service(get_new_access_token)
+                .app_data(user_repository_data)
+                .app_data(web::Data::new(encoding_key.clone()))
+                .app_data(web::Data::new(decoding_key.clone())),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri("/access_token")
+            .cookie(
+                Cookie::build(REFRESH_COOKIE_NAME, refresh_token)
+                    .http_only(true)
+                    .finish(),
+            )
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        let cookies: Vec<_> = resp
+            .headers()
+            .get_all(http::header::SET_COOKIE)
+            .map(|v| v.to_str().unwrap().to_owned())
+            .collect();
+        let auth_token = get_cookies_value(cookies.clone(), AUTH_COOKIE_NAME);
+        let refresh_token = get_cookies_value(cookies, REFRESH_COOKIE_NAME);
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        assert!(verify_access_token(&auth_token, &decoding_key).is_ok());
+        assert!(verify_refresh_token(&refresh_token, &decoding_key).is_ok());
+    }
+
+    #[actix_web::test]
+    async fn logout_success_test() {
+        let jwt_secret = "1qGpT9oS0dChQ287Ve1Uyha6CRG3nqGI";
+        let encoding_key = EncodingKey::from_secret(jwt_secret.as_bytes());
+        let decoding_key = DecodingKey::from_secret(jwt_secret.as_bytes());
+
+        let user_repository: Arc<dyn UserRepository> = Arc::new(UserRepositoryLogoutSuccessStub {});
+        let user_repository_data: web::Data<dyn UserRepository> = web::Data::from(user_repository);
+
+        let app = test::init_service(
+            App::new()
+                .service(logout)
+                .app_data(user_repository_data)
+                .app_data(web::Data::new(encoding_key.clone()))
+                .app_data(web::Data::new(decoding_key.clone())),
+        )
+        .await;
+
+        let auth_token = generate_access_token(1, &encoding_key).unwrap();
+
+        let req = test::TestRequest::post()
+            .uri("/logout")
+            .cookie(
+                Cookie::build(AUTH_COOKIE_NAME, auth_token)
+                    .http_only(true)
+                    .finish(),
+            )
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        let cookies: Vec<_> = resp
+            .headers()
+            .get_all(http::header::SET_COOKIE)
+            .map(|v| v.to_str().unwrap().to_owned())
+            .collect();
+        let auth_token = get_cookies_value(cookies.clone(), AUTH_COOKIE_NAME);
+        let refresh_token = get_cookies_value(cookies, REFRESH_COOKIE_NAME);
+
+        assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        assert_eq!(auth_token, "");
+        assert_eq!(refresh_token, "");
     }
 }

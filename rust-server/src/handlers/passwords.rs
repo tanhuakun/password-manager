@@ -169,7 +169,7 @@ mod tests {
     use crate::models::stored_passwords::StoredPassword;
     use crate::models::users::User;
     use crate::repository::user_repository::{UserRepository, MANUAL_REGISTRATION};
-    use crate::utils::jwt_utils::generate_token;
+    use crate::utils::jwt_utils::generate_access_token;
     use actix_web::dev::ServiceResponse;
     use actix_web::test::TestRequest;
     use actix_web::{cookie::Cookie, test, web, App};
@@ -206,7 +206,7 @@ mod tests {
 
     fn build_auth_cookie<'a>() -> Cookie<'a> {
         let encoding_key = EncodingKey::from_secret(SECRET.as_bytes());
-        let auth_token = generate_token(1, &encoding_key).unwrap();
+        let auth_token = generate_access_token(1, &encoding_key).unwrap();
         Cookie::build(AUTH_COOKIE_NAME, auth_token)
             .http_only(true)
             .finish()
@@ -231,6 +231,7 @@ mod tests {
                 registration_type: String::from(MANUAL_REGISTRATION),
                 totp_enabled: false,
                 totp_base32: None,
+                token_revoked_time: 0,
             }));
         }
     }
@@ -246,6 +247,7 @@ mod tests {
                 registration_type: String::from(MANUAL_REGISTRATION),
                 totp_enabled: false,
                 totp_base32: None,
+                token_revoked_time: 0,
             }));
         }
 
