@@ -2,7 +2,7 @@ use actix_cors::Cors;
 use actix_governor::{Governor, GovernorConfigBuilder};
 use actix_session::{config::PersistentSession, storage::RedisSessionStore, SessionMiddleware};
 use actix_web::{cookie::Key, web, App, HttpServer};
-use database::create_db_pool;
+use database::{create_db_pool, run_migrations};
 use dotenvy::dotenv;
 use handlers::authentication::{
     check_login, disable_2fa, finalise_2fa_secret, get_2fa_url, get_new_access_token, google_login,
@@ -31,7 +31,9 @@ pub mod utils;
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let pool = create_db_pool(database_url);
+    let mut pool = create_db_pool(database_url);
+
+    run_migrations(&mut pool).expect("Failed to run migrations!");
 
     let secret = env::var("JWT_SECRET").expect("JWT SECRET NOT SET");
 

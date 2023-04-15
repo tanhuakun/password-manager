@@ -30,4 +30,8 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(stored_passwords, users, users_oauth,);
+diesel::allow_tables_to_appear_in_same_query!(
+    stored_passwords,
+    users,
+    users_oauth,
+);
