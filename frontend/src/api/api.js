@@ -7,12 +7,10 @@ axios.defaults.withCredentials = true;
 
 var promiseCache = null;
 function refresh_access_token(fn) {
-  console.log("yo");
   if (promiseCache != null) return promiseCache;
   promiseCache = axios.get(API_URL + "/auth/access_token");
   promiseCache.then(
     function () {
-      console.log("hello");
       promiseCache = null;
     },
     function () {
@@ -47,7 +45,7 @@ axios.interceptors.response.use(
       }
       return error.response;
     } else {
-      return error;
+      return Promise.reject(error);
     }
   }
 );
@@ -57,7 +55,6 @@ async function make_post(route, data) {
     const res = await axios.post(API_URL + route, data);
     return res;
   } catch (error) {
-    console.log(error);
     return error.response;
   }
 }
@@ -67,7 +64,6 @@ async function make_put(route, params) {
     const res = await axios.put(API_URL + route, { params });
     return res;
   } catch (error) {
-    console.log(error);
     return error.response;
   }
 }
@@ -77,7 +73,6 @@ async function make_get(route, params) {
     const res = await axios.get(API_URL + route, { params });
     return res;
   } catch (error) {
-    console.log(error);
     return error.response;
   }
 }
@@ -87,7 +82,6 @@ async function make_delete(route) {
     const res = await axios.delete(API_URL + route);
     return res;
   } catch (error) {
-    console.log(error);
     return error.response;
   }
 }
