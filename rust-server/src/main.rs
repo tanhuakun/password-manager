@@ -2,6 +2,7 @@ use actix_cors::Cors;
 use actix_governor::{Governor, GovernorConfigBuilder};
 use actix_session::{config::PersistentSession, storage::RedisSessionStore, SessionMiddleware};
 use actix_web::{cookie::Key, web, App, HttpServer};
+use config::VariableConfigBuilder;
 use database::{create_db_pool, run_migrations};
 use dotenvy::dotenv;
 use handlers::authentication::{
@@ -17,7 +18,6 @@ use repository::stored_password_repository::{
     StoredPasswordRepository, StoredPasswordRepositoryMain,
 };
 use repository::user_repository::{UserRepository, UserRepositoryMain};
-use std::env;
 use std::sync::Arc;
 
 pub mod config;
@@ -30,21 +30,21 @@ pub mod utils;
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let mut pool = create_db_pool(database_url);
+
+    let var_config = VariableConfigBuilder::read_all_config();
+
+    let mut pool = create_db_pool(var_config.database_url);
 
     run_migrations(&mut pool).expect("Failed to run migrations!");
 
-    let secret = env::var("JWT_SECRET").expect("JWT SECRET NOT SET");
+    let secret = var_config.jwt_secret;
 
-    let encoding_key = EncodingKey::from_secret(secret.as_bytes());
-    let decoding_key = DecodingKey::from_secret(secret.as_bytes());
+    let encoding_key = EncodingKey::from_base64_secret(&secret).unwrap();
+    let decoding_key = DecodingKey::from_base64_secret(&secret).unwrap();
 
     let session_secret_key = Key::generate();
-    let redis_connection_string = env::var("REDIS_URL").expect("REDIS_URL NOT SET");
-    let store = RedisSessionStore::new(redis_connection_string)
-        .await
-        .unwrap();
+
+    let store = RedisSessionStore::new(var_config.redis_url).await.unwrap();
 
     let governor_conf = GovernorConfigBuilder::default()
         .per_second(2)
@@ -110,7 +110,7 @@ async fn main() -> std::io::Result<()> {
                     ),
             )
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind(("0.0.0.0", 8080))?
     .run()
     .await
 }
