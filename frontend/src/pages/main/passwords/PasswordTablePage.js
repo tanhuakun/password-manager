@@ -38,7 +38,7 @@ function PasswordTablePage() {
 
   async function fetchPasswords() {
     let res = await get_passwords();
-    if (!res || res.status === 500) {
+    if (!res || res.status !== 200) {
       toast.error("Server error!");
       return;
     }

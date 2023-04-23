@@ -27,16 +27,16 @@ function TwoFactorAuthPage() {
     let res = await get_2fa_url();
     setIsLoadingRequest(false);
 
-    if (!res || res.status === 500) {
-      setIsInternalServerError(true);
-      toast.error('Server error!');
-      return;
-    }
-
     if (res.status === 409) {
       // Exists!
       setIs2FASetUp(true);
       setIsFetchingQRUrl(false);
+      return;
+    }
+
+    if (!res || res.status !== 200) {
+      setIsInternalServerError(true);
+      toast.error('Server error!');
       return;
     }
 
@@ -61,11 +61,6 @@ function TwoFactorAuthPage() {
     setIsLoadingRequest(true);
     let res = await post_finalise_2fa_secret({ code: enteredCode });
     setIsLoadingRequest(false);
-    if (!res || res.status === 500) {
-      toast.error('Server error!');
-      setIsInternalServerError(true);
-      return;
-    }
 
     if (res.status === 403) {
       setShowInvalidCode(true);
@@ -74,6 +69,12 @@ function TwoFactorAuthPage() {
 
     if (res.status === 409) {
       console.log("2FA has already been setup, frontend issue");
+    }
+
+    if (!res || res.status !== 200) {
+      toast.error('Server error!');
+      setIsInternalServerError(true);
+      return;
     }
 
     setIs2FASetUp(true);
@@ -97,7 +98,7 @@ function TwoFactorAuthPage() {
     let res = await delete_2fa_enabled();
     setIsLoadingRequest(false);
 
-    if (!res || res.status === 500) {
+    if (!res || res.status !== 200) {
       toast.error('Server error!');
       setIsInternalServerError(true);
       return;

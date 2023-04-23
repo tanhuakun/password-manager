@@ -12,14 +12,14 @@ export function AuthProvider({ children }) {
 
   async function checkUserLoggedIn() {
     let res = await check_login();
-    if (!res || res.status === 500) {
-      throw new Error("Server error when loading authentication details");
-    }
-
     if (res.status === 401) {
       console.log("Unauthorized");
       setIsAuthenticated(false);
       return false;
+    }
+
+    if (!res || res.status !== 200) {
+      throw new Error("Server error when loading authentication details");
     }
 
     setIsAuthenticated(true);

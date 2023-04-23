@@ -54,7 +54,7 @@ function LoginPage() {
       let res = await post_google_login({
         access_token: credentialResponse.access_token,
       });
-      if (!res || res.status === 500) {
+      if (!res || res.status !== 200) {
         toast.error("Server error!");
         return;
       }
@@ -83,15 +83,16 @@ function LoginPage() {
     });
     setIsLoading(false);
 
-    if (!res || res.status === 500) {
-      toast.error("Server error!");
-      return;
-    }
-
     if (res.status === 401) {
       setIsInvalidCredentials(true);
       return;
     }
+
+    if (!res || res.status !== 200) {
+      toast.error("Server error!");
+      return;
+    }
+
     setMasterPassword(submittedPassword);
     setFormData({
       username: "",

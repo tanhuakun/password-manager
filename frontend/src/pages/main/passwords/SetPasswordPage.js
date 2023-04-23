@@ -31,7 +31,7 @@ function SetPasswordPage() {
       setIsLoading(true);
       let res = await get_check_master_password();
 
-      if (!res || res.status === 500) {
+      if (!res || res.status !== 200) {
         toast.error("Server error!");
         return;
       }
@@ -82,7 +82,7 @@ function SetPasswordPage() {
     });
     setIsLoading(false);
 
-    if (!res || res.status === 500) {
+    if (!res || res.status !== 200) {
       toast.error("Server error!");
       return;
     }
@@ -121,13 +121,13 @@ function SetPasswordPage() {
     });
     setIsLoading(false);
 
-    if (!res || res.status === 500) {
-      toast.error("Server error!");
+    if (res.status === 409) {
+      console.log("This shouldn't happen! Password should not be set");
       return;
     }
 
-    if (res.status === 409) {
-      console.log("This shouldn't happen! Password should not be set");
+    if (!res || res.status !== 200) {
+      toast.error("Server error!");
       return;
     }
 

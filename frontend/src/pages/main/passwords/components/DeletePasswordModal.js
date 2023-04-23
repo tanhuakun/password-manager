@@ -15,7 +15,7 @@ function DeletePasswordModal({
     setIsLoading(true);
     let res = await delete_password(passwordObj.id);
     console.log(res);
-    if (!res || res.status === 500) {
+    if (!res || res.status !== 200) {
       toast.error("Server error!");
       return;
     }

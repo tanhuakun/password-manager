@@ -59,13 +59,14 @@ function RegisterPage() {
       password: submittedPasswordHash,
     });
     setIsLoading(false);
-    if (!res || res.status === 500) {
-      toast.error("Server error!");
-      return;
-    }
 
     if (res.status === 409) {
       setIsExistingUser(true);
+      return;
+    }
+
+    if (!res || res.status !== 200) {
+      toast.error("Server error!");
       return;
     }
 

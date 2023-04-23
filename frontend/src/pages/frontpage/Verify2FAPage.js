@@ -25,10 +25,6 @@ function Verify2FAPage() {
     let res = await post_verify_2fa({ code: enteredCode });
     setIsLoading(false);
 
-    if (!res || res.status === 500) {
-      toast.error("Server error! Please try again later");
-      return;
-    }
 
     if (res.status === 403) {
       setShowInvalidCode(true);
@@ -37,6 +33,11 @@ function Verify2FAPage() {
 
     if (res.status === 401) {
       setIsRelogin(true);
+      return;
+    }
+
+    if (!res || res.status !== 200) {
+      toast.error("Server error! Please try again later");
       return;
     }
 

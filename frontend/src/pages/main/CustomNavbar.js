@@ -11,7 +11,7 @@ function CustomNavbar() {
 
   async function logout() {
     let res = await post_logout();
-    if (!res || res.status === 500) {
+    if (!res || res.status !== 200) {
       toast.error("Server error!");
     }
 

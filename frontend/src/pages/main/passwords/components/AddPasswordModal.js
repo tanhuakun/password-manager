@@ -66,13 +66,16 @@ function AddPasswordModal({
       password: encryptedPassword,
     });
     setIsLoading(false);
-    if (!res || res.status === 500) {
-      toast.error("Server error!");
-      return;
-    } else if (res.status === 409) {
+   
+    if (res.status === 409) {
       console.log("This shouldn't happen! Frontend error");
       return;
     }
+
+    if (!res || res.status !== 200) {
+      toast.error("Server error!");
+      return;
+    } 
 
     let passwordObj = res.data;
     passwordObj.password = await decryptPassword(
