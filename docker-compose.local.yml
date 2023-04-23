@@ -1,0 +1,74 @@
+version: "3.9"
+
+secrets:
+  db_user:
+    external: true
+  db_password:
+    external: true
+  db_url:
+    external: true
+  jwt_secret:
+    external: true
+
+services:
+  redis:
+    image: "redis:alpine"
+    restart: always
+    networks:
+      - my-network
+  mysql:
+    image: "mysql:latest"
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    secrets:
+      - db_user
+      - db_password
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+      MYSQL_USER_FILE: /run/secrets/db_user
+      MYSQL_PASSWORD_FILE: /run/secrets/db_password
+      MYSQL_DATABASE: passwordmanager
+    volumes:
+      - sql_data_volume:/var/lib/mysql
+    networks:
+      - my-network
+  backend:
+    image: passwordmanager-backend
+    secrets:
+      - db_url
+      - jwt_secret
+    environment:
+      - DATABASE_URL_FILE=/run/secrets/db_url
+      - JWT_SECRET_FILE=/run/secrets/jwt_secret
+      - REDIS_URL=redis://redis:6379
+    build:
+      context: .
+      dockerfile: dockerfiles/backend.Dockerfile
+    networks:
+      - my-network
+  frontend:
+    image: passwordmanager-frontend
+    build:
+      context: .
+      dockerfile: dockerfiles/frontend.Dockerfile
+      args:
+        - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+    environment:
+      - PASS_MAN_BACKEND_URL=http://backend:8080
+    ports:
+    - "8080:80"
+    volumes:
+      # template will automatically get substituted with env variables
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template
+    networks:
+      - my-network
+    depends_on:
+      - backend
+volumes:
+  sql_data_volume:
+networks:
+  my-network:
+    driver: overlay
+    attachable: true
+    
+
