@@ -8,11 +8,9 @@ import { GoogleOAuthProvider } from "@react-oauth/google";
 import { AuthProvider } from "hooks/useAuth";
 import { MasterPasswordProvider } from "hooks/useMasterPassword";
 
-const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID;
-
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
-  <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+  <GoogleOAuthProvider clientId={window._env_.GOOGLE_CLIENT_ID}>
     <AuthProvider>
       <MasterPasswordProvider>
         <React.StrictMode>

@@ -4,10 +4,6 @@ WORKDIR /frontend
 ## copy frontend folder to app
 COPY ./frontend .
 
-## Ensure google client id is in env when building
-ARG GOOGLE_CLIENT_ID
-ENV REACT_APP_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-
 RUN npm --verbose ci
 RUN npm run build
 
@@ -15,4 +11,8 @@ RUN npm run build
 FROM nginx:alpine
 COPY --from=frontend /frontend/build /var/www/build
 COPY ./nginx/nginx.conf /etc/nginx/nginx.conf
+COPY ./scripts/frontend_setup.sh /usr/share/nginx/html/frontend_setup.sh
+RUN apk add --no-cache bash
+RUN chmod +x /usr/share/nginx/html/frontend_setup.sh
 
+ENTRYPOINT ["/bin/bash", "-c", "/usr/share/nginx/html/frontend_setup.sh && nginx -g \"daemon off;\""]

@@ -51,15 +51,11 @@ services:
     build:
       context: .
       dockerfile: dockerfiles/frontend.Dockerfile
-      args:
-        - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     environment:
       - PASS_MAN_BACKEND_URL=http://backend:8080
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
     ports:
     - "8080:80"
-    volumes:
-      # template will automatically get substituted with env variables
-      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template
     networks:
       - my-network
     depends_on:
