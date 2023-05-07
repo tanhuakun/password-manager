@@ -36,3 +36,40 @@
     transform: rotate(360deg);
   }
 }
+
+/* Medium devices */
+@media (min-width: 820px) {
+  .frontpage_box{
+    width: 50%;
+  }
+
+  .small_inputs {
+    width: 25%;
+  }
+
+  .big_inputs {
+    width: 50%;
+  }
+
+  .password_dashboard_items {
+    width: 75%;
+  }
+}
+
+@media (max-width: 820px) { 
+  .frontpage_box{
+    width: 90%;
+  }
+
+  .small_inputs {
+    width: 90%;
+  }
+
+  .big_inputs {
+    width: 90%;
+  }
+
+  .password_dashboard_items {
+    width: 90%;
+  }
+}

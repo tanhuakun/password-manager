@@ -76,7 +76,7 @@ function RegisterPage() {
 
   return (
     <div className="d-flex h-100 p-3 d-flex align-items-center justify-content-center">
-      <div className="w-50 h-75">
+      <div className="frontpage_box h-75">
         <div className="text-center mb-4">
           <h3 className="display-3">Password Manager</h3>
         </div>

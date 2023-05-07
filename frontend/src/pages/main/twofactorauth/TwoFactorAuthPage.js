@@ -120,7 +120,7 @@ function TwoFactorAuthPage() {
       ) : is2FASetUp ? (
         <div className="w-100 d-flex flex-column align-items-center justify-content-center">
           <div className="my-4">2FA setup has been completed, remove it?</div>
-          <Form className="w-25 mt-4" onSubmit={submitRemove2FA}>
+          <Form className="small_inputs mt-4" onSubmit={submitRemove2FA}>
             <Form.Group className="mb-3" controlId="formGroupUsername">
               <Form.Label>Enter The Word "confirm" Below</Form.Label>
               <Form.Control
@@ -152,7 +152,7 @@ function TwoFactorAuthPage() {
             confirm your setup!
           </div>
           <QRCode value={QRCodeURL} />
-          <Form className="w-25 mt-4" onSubmit={submitCode}>
+          <Form className="small_inputs mt-4" onSubmit={submitCode}>
             <Form.Group className="mb-3" controlId="formGroupUsername">
               <Form.Label>Authenticator Code Confirmation</Form.Label>
               <Form.Control

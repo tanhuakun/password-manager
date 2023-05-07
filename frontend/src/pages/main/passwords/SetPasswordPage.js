@@ -140,7 +140,7 @@ function SetPasswordPage() {
   }
 
   return (
-    <div className="w-50">
+    <div className="big_inputs">
       {isFetchingMasterPassword ? (
         <div className="text-center">Loading...</div>
       ) : hasUserSetPassword ? (

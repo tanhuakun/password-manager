@@ -9,6 +9,7 @@ import { toast } from "react-toastify";
 import { clientPasswordHash } from "utils/crypto";
 import { useAuth } from "hooks/useAuth";
 import { useMasterPassword } from "hooks/useMasterPassword";
+import { Github } from "react-bootstrap-icons";
 
 function LoginPage() {
   const { isAuthenticated, setIsAuthenticated } = useAuth();
@@ -103,7 +104,7 @@ function LoginPage() {
 
   return (
     <div className="d-flex h-100 p-3 d-flex align-items-center justify-content-center">
-      <div className="w-50 h-75">
+      <div className="frontpage_box h-75">
         <div className="text-center mb-4">
           <h3 className="display-3">Password Manager</h3>
         </div>
@@ -166,6 +167,11 @@ function LoginPage() {
           <p>
             Don't have an account? <Link to="/register">Sign up!</Link>
           </p>
+        </div>
+        <div className="w-100 text-center">
+          <a href="https://github.com/tanhuakun/password-manager">
+            <Github size={34} style={{ cursor: "grab" }} color="black" />
+          </a>
         </div>
       </div>
     </div>
