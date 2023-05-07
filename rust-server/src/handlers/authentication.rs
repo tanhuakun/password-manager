@@ -1,5 +1,9 @@
-use crate::config::{AUTH_COOKIE_NAME, REFRESH_COOKIE_NAME, REFRESH_TOKEN_TIME_SECONDS};
+use crate::config::{
+    ACCESS_TOKEN_TIME_SECONDS, AUTH_COOKIE_NAME, CSRF_COOKIE_NAME, CSRF_HEADER_NAME,
+    REFRESH_COOKIE_NAME, REFRESH_TOKEN_TIME_SECONDS,
+};
 use crate::repository::user_repository::{UserRepository, GOOGLE_PROVIDER, MANUAL_REGISTRATION};
+use crate::utils::csrf_utils::generate_csrf_token;
 use crate::utils::jwt_utils::{
     self, generate_access_token, generate_refresh_token, verify_access_token, verify_refresh_token,
 };
@@ -60,8 +64,9 @@ impl FromRequest for AuthenticatedUser {
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
         let decoding_key = req.app_data::<web::Data<DecodingKey>>().unwrap();
 
-        let cookie = req.cookie(AUTH_COOKIE_NAME);
-        if let Some(cookie_value) = cookie {
+        let auth_cookie = req.cookie(AUTH_COOKIE_NAME);
+
+        if let Some(cookie_value) = auth_cookie {
             let token = cookie_value.value();
 
             let jwt_claims = verify_access_token(&token, decoding_key).map_err(|e| match e {
@@ -73,9 +78,27 @@ impl FromRequest for AuthenticatedUser {
                 }
             });
 
-            let result = jwt_claims.map(|claim| AuthenticatedUser {
-                user_id: claim.user_id,
-            });
+            let csrf_token = req.headers().get(CSRF_HEADER_NAME);
+
+            if csrf_token.is_none() {
+                return ready(Err(Error::from(actix_web::error::ErrorUnauthorized(
+                    "InvalidCSRF",
+                ))));
+            }
+
+            let result = jwt_claims
+                .and_then(|claim| {
+                    if claim.csrf_token == csrf_token.unwrap().to_str().unwrap() {
+                        Ok(claim)
+                    } else {
+                        Err(Error::from(actix_web::error::ErrorUnauthorized(
+                            "InvalidCSRF",
+                        )))
+                    }
+                })
+                .map(|claim| AuthenticatedUser {
+                    user_id: claim.user_id,
+                });
             return ready(result);
         }
         ready(Err(Error::from(actix_web::error::ErrorUnauthorized(
@@ -88,7 +111,9 @@ fn generate_cookies_response_builder(
     user_id: i32,
     encoding_key: &EncodingKey,
 ) -> Result<HttpResponseBuilder> {
-    let auth_token = generate_access_token(user_id, &encoding_key)
+    let csrf_token = generate_csrf_token();
+
+    let auth_token = generate_access_token(user_id, &csrf_token, &encoding_key)
         .map_err(actix_web::error::ErrorInternalServerError)?;
 
     let refresh_token = generate_refresh_token(user_id, &encoding_key)
@@ -98,14 +123,24 @@ fn generate_cookies_response_builder(
         .http_only(true)
         .path("/")
         .max_age(time::Duration::seconds(REFRESH_TOKEN_TIME_SECONDS)) // so that access token will be deemed as expired when refresh token is still available
-        .same_site(SameSite::None) // TODO require better security.
+        .same_site(SameSite::Strict)
+        .secure(true)
         .finish();
 
     let refresh_token_cookie = Cookie::build(REFRESH_COOKIE_NAME, refresh_token)
         .http_only(true)
         .path("/")
         .max_age(time::Duration::seconds(REFRESH_TOKEN_TIME_SECONDS))
-        .same_site(SameSite::None) // TODO require better security.
+        .same_site(SameSite::Strict)
+        .secure(true)
+        .finish();
+
+    let csrf_token_cookie = Cookie::build(CSRF_COOKIE_NAME, csrf_token)
+        .http_only(false)
+        .path("/")
+        .max_age(time::Duration::seconds(ACCESS_TOKEN_TIME_SECONDS))
+        .same_site(SameSite::Strict)
+        .secure(true)
         .finish();
 
     let mut response = HttpResponse::Ok();
@@ -113,6 +148,7 @@ fn generate_cookies_response_builder(
     Ok(response
         .cookie(access_token_cookie)
         .cookie(refresh_token_cookie)
+        .cookie(csrf_token_cookie)
         .take())
 }
 
@@ -491,6 +527,8 @@ mod tests {
     use actix_web::{http, test, web, App};
     use std::sync::Arc;
 
+    use super::super::tests::test_utils::{CSRF_TOKEN_HEADER, TEST_CSRF_TOKEN};
+
     pub struct UserRepositoryUserExistsStub {}
 
     impl UserRepository for UserRepositoryUserExistsStub {
@@ -817,7 +855,7 @@ mod tests {
         )
         .await;
 
-        let auth_token = generate_access_token(1, &encoding_key).unwrap();
+        let auth_token = generate_access_token(1, TEST_CSRF_TOKEN, &encoding_key).unwrap();
 
         let req = test::TestRequest::get()
             .uri("/is_login")
@@ -826,6 +864,7 @@ mod tests {
                     .http_only(true)
                     .finish(),
             )
+            .insert_header(CSRF_TOKEN_HEADER)
             .to_request();
 
         let resp = test::call_service(&app, req).await;
@@ -876,7 +915,7 @@ mod tests {
         )
         .await;
 
-        let auth_token = generate_access_token(1, &encoding_key).unwrap();
+        let auth_token = generate_access_token(1, TEST_CSRF_TOKEN, &encoding_key).unwrap();
 
         let req = test::TestRequest::get()
             .uri("/2fa_url")
@@ -885,6 +924,7 @@ mod tests {
                     .http_only(true)
                     .finish(),
             )
+            .insert_header(CSRF_TOKEN_HEADER)
             .to_request();
 
         let resp = test::call_service(&app, req).await;
@@ -909,7 +949,7 @@ mod tests {
         )
         .await;
 
-        let auth_token = generate_access_token(1, &encoding_key).unwrap();
+        let auth_token = generate_access_token(1, TEST_CSRF_TOKEN, &encoding_key).unwrap();
 
         let req = test::TestRequest::get()
             .uri("/2fa_url")
@@ -918,6 +958,7 @@ mod tests {
                     .http_only(true)
                     .finish(),
             )
+            .insert_header(CSRF_TOKEN_HEADER)
             .to_request();
 
         let resp = test::call_service(&app, req).await;
@@ -941,7 +982,7 @@ mod tests {
         )
         .await;
 
-        let auth_token = generate_access_token(1, &encoding_key).unwrap();
+        let auth_token = generate_access_token(1, TEST_CSRF_TOKEN, &encoding_key).unwrap();
 
         let req = test::TestRequest::post()
             .uri("/2fa_secret")
@@ -953,6 +994,7 @@ mod tests {
                     .http_only(true)
                     .finish(),
             )
+            .insert_header(CSRF_TOKEN_HEADER)
             .to_request();
 
         let resp = test::call_service(&app, req).await;
@@ -980,7 +1022,7 @@ mod tests {
         )
         .await;
 
-        let auth_token = generate_access_token(1, &encoding_key).unwrap();
+        let auth_token = generate_access_token(1, TEST_CSRF_TOKEN, &encoding_key).unwrap();
 
         let code1 = generate_totp(base32_secret.to_owned());
 
@@ -992,6 +1034,7 @@ mod tests {
                     .http_only(true)
                     .finish(),
             )
+            .insert_header(CSRF_TOKEN_HEADER)
             .to_request();
 
         let resp1 = test::call_service(&app, req1).await;
@@ -1006,6 +1049,7 @@ mod tests {
                     .http_only(true)
                     .finish(),
             )
+            .insert_header(CSRF_TOKEN_HEADER)
             .to_request();
 
         let resp2 = test::call_service(&app, req2).await;
@@ -1118,7 +1162,7 @@ mod tests {
         )
         .await;
 
-        let auth_token = generate_access_token(1, &encoding_key).unwrap();
+        let auth_token = generate_access_token(1, TEST_CSRF_TOKEN, &encoding_key).unwrap();
 
         let req = test::TestRequest::post()
             .uri("/logout")
@@ -1127,6 +1171,7 @@ mod tests {
                     .http_only(true)
                     .finish(),
             )
+            .insert_header(CSRF_TOKEN_HEADER)
             .to_request();
 
         let resp = test::call_service(&app, req).await;
