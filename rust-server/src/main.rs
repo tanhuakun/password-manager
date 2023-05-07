@@ -1,4 +1,3 @@
-use actix_cors::Cors;
 use actix_governor::{Governor, GovernorConfigBuilder};
 use actix_session::{config::PersistentSession, storage::RedisSessionStore, SessionMiddleware};
 use actix_web::{cookie::Key, web, App, HttpServer};
@@ -68,7 +67,6 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(decoding_key.clone()))
             .app_data(user_repository_data.clone())
             .app_data(stored_password_repository_data.clone())
-            .wrap(Cors::permissive()) // TODO, change this
             .service(
                 web::scope("/api")
                     .service(

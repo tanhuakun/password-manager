@@ -2,6 +2,9 @@ import axios from "axios";
 
 const API_URL = "/api";
 const TOKEN_EXPIRED = "TokenExpired";
+const INVALID_CSRF = "InvalidCSRF";
+const CSRF_TOKEN_HEADER = "csrf-token";
+const CSRF_TOKEN_COOKIE = "csrf_token";
 
 axios.defaults.withCredentials = true;
 
@@ -20,6 +23,26 @@ function refresh_access_token(fn) {
   return promiseCache;
 }
 
+// Retrieve CSRF token from a cookie
+function get_csrf_token() {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${CSRF_TOKEN_COOKIE}=`);
+  if (parts.length === 2) {
+    return parts.pop().split(';').shift();
+  }
+
+}
+
+axios.interceptors.request.use(config => {
+  // Retrieve the CSRF token from the cookie
+  const csrfToken = get_csrf_token();
+  if (csrfToken) {
+    // Append the CSRF token as a custom header
+    config.headers[CSRF_TOKEN_HEADER] = csrfToken;
+  }
+  return config;
+});
+
 axios.interceptors.response.use(
   function (response) {
     return response;
@@ -28,7 +51,8 @@ axios.interceptors.response.use(
     if (error.response) {
       if (
         error.response.status === 401 &&
-        error.response.data === TOKEN_EXPIRED
+        (error.response.data === TOKEN_EXPIRED ||
+          error.response.data === INVALID_CSRF)
       ) {
         // token has expired;
         try {
