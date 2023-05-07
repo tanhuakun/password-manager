@@ -1790,6 +1790,7 @@ dependencies = [
  "actix-session",
  "actix-web",
  "base32",
+ "base64 0.21.0",
  "chrono",
  "diesel",
  "diesel_migrations",

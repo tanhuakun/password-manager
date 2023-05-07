@@ -25,3 +25,4 @@ actix-session = { version = "0.7.2", features = ["redis-rs-session", "redis-rs-t
 time = "0.3.20"
 actix-governor = "0.4.0"
 diesel_migrations = "2.0.0"
+base64 = "0.21.0"

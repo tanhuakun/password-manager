@@ -178,6 +178,8 @@ mod tests {
 
     const SECRET: &str = "1qGpT9oS0dChQ287Ve1Uyha6CRG3nqGI";
 
+    use super::super::tests::test_utils::{CSRF_TOKEN_HEADER, TEST_CSRF_TOKEN};
+
     async fn generate_response(
         user_repository_data: web::Data<dyn UserRepository>,
         stored_password_repository: web::Data<dyn StoredPasswordRepository>,
@@ -206,7 +208,7 @@ mod tests {
 
     fn build_auth_cookie<'a>() -> Cookie<'a> {
         let encoding_key = EncodingKey::from_secret(SECRET.as_bytes());
-        let auth_token = generate_access_token(1, &encoding_key).unwrap();
+        let auth_token = generate_access_token(1, TEST_CSRF_TOKEN, &encoding_key).unwrap();
         Cookie::build(AUTH_COOKIE_NAME, auth_token)
             .http_only(true)
             .finish()
@@ -372,6 +374,7 @@ mod tests {
 
         let req = test::TestRequest::get()
             .uri("/is_master_password_set")
+            .insert_header(CSRF_TOKEN_HEADER)
             .cookie(build_auth_cookie());
 
         let resp =
@@ -395,6 +398,7 @@ mod tests {
 
         let req = test::TestRequest::get()
             .uri("/is_master_password_set")
+            .insert_header(CSRF_TOKEN_HEADER)
             .cookie(build_auth_cookie());
 
         let resp =
@@ -420,6 +424,7 @@ mod tests {
             .set_json(json!({
                 "password": "123456"
             }))
+            .insert_header(CSRF_TOKEN_HEADER)
             .cookie(build_auth_cookie());
 
         let resp =
@@ -441,6 +446,7 @@ mod tests {
             .set_json(json!({
                 "password": "123456"
             }))
+            .insert_header(CSRF_TOKEN_HEADER)
             .cookie(build_auth_cookie());
 
         let resp =
@@ -463,6 +469,7 @@ mod tests {
             .set_json(json!({
                 "password": "123456"
             }))
+            .insert_header(CSRF_TOKEN_HEADER)
             .cookie(build_auth_cookie());
 
         let resp =
@@ -485,6 +492,7 @@ mod tests {
             .set_json(json!({
                 "password": "123456"
             }))
+            .insert_header(CSRF_TOKEN_HEADER)
             .cookie(build_auth_cookie());
 
         let resp =
@@ -524,6 +532,7 @@ mod tests {
 
         let req = test::TestRequest::get()
             .uri("/")
+            .insert_header(CSRF_TOKEN_HEADER)
             .cookie(build_auth_cookie());
 
         let resp =
@@ -550,6 +559,7 @@ mod tests {
                 "purpose": "Test",
                 "password": "123456"
             }))
+            .insert_header(CSRF_TOKEN_HEADER)
             .cookie(build_auth_cookie());
 
         let resp =
@@ -583,6 +593,7 @@ mod tests {
                 "purpose": "Test",
                 "password": "123456"
             }))
+            .insert_header(CSRF_TOKEN_HEADER)
             .cookie(build_auth_cookie());
 
         let resp =
@@ -605,6 +616,7 @@ mod tests {
 
         let req = test::TestRequest::delete()
             .uri("/password/1")
+            .insert_header(CSRF_TOKEN_HEADER)
             .cookie(build_auth_cookie());
 
         let resp =

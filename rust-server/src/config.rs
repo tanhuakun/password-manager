@@ -5,6 +5,9 @@ pub const ACCESS_TOKEN_TIME_SECONDS: i64 = 60 * 15; // 15 minutes
 pub const REFRESH_TOKEN_TIME_SECONDS: i64 = 60 * 60 * 24; // 1 day
 pub const AUTH_COOKIE_NAME: &str = "access_token";
 pub const REFRESH_COOKIE_NAME: &str = "refresh_token";
+pub const CSRF_COOKIE_NAME: &str = "csrf_token";
+pub const CSRF_HEADER_NAME: &str = "csrf-token";
+pub const CSRF_TOKEN_BYTES: usize = 20;
 
 const DATABASE_URL_ENV_NAME: &str = "DATABASE_URL";
 const REDIS_URL_ENV_NAME: &str = "REDIS_URL";

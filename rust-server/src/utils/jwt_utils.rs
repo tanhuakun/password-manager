@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize)]
 pub struct Claims {
     pub user_id: i32,
+    pub csrf_token: String,
     exp: i64,
 }
 
@@ -43,10 +44,15 @@ impl fmt::Display for Errors {
     }
 }
 
-pub fn generate_access_token(user_id: i32, encoding_key: &EncodingKey) -> Result<String, Errors> {
+pub fn generate_access_token(
+    user_id: i32,
+    csrf_token: &str,
+    encoding_key: &EncodingKey,
+) -> Result<String, Errors> {
     let header = Header::default();
     let claims = Claims {
         user_id: user_id,
+        csrf_token: csrf_token.to_owned(),
         exp: Utc::now().timestamp() + ACCESS_TOKEN_TIME_SECONDS,
     };
 
@@ -99,13 +105,15 @@ mod tests {
     #[test]
     fn generate_verify_token() {
         let user_id = 1000;
+        let csrf_token = "abcdedf";
         let secret = "1qGpT9oS0dChQ287Ve1Uyha6CRG3nqGI";
 
         let encoding_key = EncodingKey::from_secret(secret.as_bytes());
         let decoding_key = DecodingKey::from_secret(secret.as_bytes());
 
-        let token = generate_access_token(user_id, &encoding_key).unwrap();
+        let token = generate_access_token(user_id, csrf_token, &encoding_key).unwrap();
         let claims = verify_access_token(&token, &decoding_key).unwrap();
         assert_eq!(user_id, claims.user_id);
+        assert_eq!(csrf_token, claims.csrf_token);
     }
 }
