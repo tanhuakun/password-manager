@@ -59,10 +59,6 @@ do
   fi
 done
 
-echo "Enter your google client id for sign in with google in React frontend!"
-read GOOGLE_CLIENT_ID
-export GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
-
 if ([ -z $db_user ] || [ -z $db_password ]) && [ "$(docker secret inspect db_url --format {{.Spec.Name}} 2> /dev/null)" != "db_url" ]; then
   echo "db_user and/or db_password has been set, but db_url has not."
   echo "Remove db_user and db_password secrets manually and try again!"
