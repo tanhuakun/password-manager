@@ -98,8 +98,8 @@ function PasswordTablePage() {
         </div>
       ) : (
         <div className="d-flex w-100 p-3 flex-column align-items-center justify-content-center">
-          <h6 className="display-6 w-75">Passwords</h6>
-          <div className="w-75 mb-2 d-flex flex-row justify-content-between">
+          <h6 className="display-6 password_dashboard_items">Passwords</h6>
+          <div className="password_dashboard_items mb-2 d-flex flex-row justify-content-between">
             <AddPasswordModal
               show={isAddPasswordModalOpen}
               handleClose={closeAddPasswordModal}
@@ -124,7 +124,7 @@ function PasswordTablePage() {
               />
             </InputGroup>
           </div>
-          <Accordion className="w-75">{passwordsDiv}</Accordion>
+          <Accordion className="password_dashboard_items">{passwordsDiv}</Accordion>
         </div>
       )}
     </div>

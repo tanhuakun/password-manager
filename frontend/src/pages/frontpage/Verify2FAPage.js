@@ -52,7 +52,7 @@ function Verify2FAPage() {
           <Link to="/">To Login Page</Link>
         </div>
       ) : (
-        <Form className="w-25 mt-4" onSubmit={submitCode}>
+        <Form className="small_inputs mt-4" onSubmit={submitCode}>
           <Form.Group className="mb-3" controlId="formGroupUsername">
             <Form.Label>Authenticator Code</Form.Label>
             <Form.Control
