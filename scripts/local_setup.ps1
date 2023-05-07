@@ -53,9 +53,6 @@ while ($true) {
     }
 }
 
-Write-Host "Enter your google client id for sign in with google in React frontend!"
-$env:GOOGLE_CLIENT_ID = Read-Host
-
 if ([string]::IsNullOrWhiteSpace($db_user) -or [string]::IsNullOrWhiteSpace($db_password) -and (docker secret inspect db_url --format "{{.Spec.Name}}" 2> $null) -ne "db_url") {
     Write-Host "db_user and/or db_password has been set, but db_url has not."
     Write-Host "Remove db_user and db_password secrets manually and try again!"
