@@ -1,12 +1,10 @@
-name: Backend Test
+name: backend_test
 
 on:
   push:
     branches: [ "main" ]
-    paths: rust-server/**
   pull_request:
     branches: [ "main" ]
-    paths: rust-server/**
 
 env:
   CARGO_TERM_COLOR: always
@@ -18,10 +16,26 @@ jobs:
       run:
         working-directory: ./rust-server
     steps:
+    - name: Check if relevant files have changed
+      uses: actions/github-script@0.9.0
+      id: backend-changed
+      with:
+        result-encoding: string
+        script: |
+          const result = await github.pulls.listFiles({
+            owner: context.payload.repository.owner.login,
+            repo: context.payload.repository.name,
+            pull_number: context.payload.number,
+            per_page: 100
+          })
+          const backendChanged = result.data.filter(f => f.filename.startsWith("rust-server/")).length > 0
+          console.log(backendChanged)
+          return backendChanged
     - uses: actions/checkout@v3
+      if: ${{ steps.backend-changed.outputs.result == 'true' }}
     - name: Build
+      if: ${{ steps.backend-changed.outputs.result == 'true' }}
       run: cargo build --verbose
     - name: Run tests
+      if: ${{ steps.backend-changed.outputs.result == 'true' }}
       run: cargo test --verbose
-
-## TODO add frontend tests 
