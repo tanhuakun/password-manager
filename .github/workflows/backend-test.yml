@@ -1,12 +1,10 @@
-name: Backend Test
+name: backend_test
 
 on:
   push:
     branches: [ "main" ]
-    paths: rust-server/**
   pull_request:
     branches: [ "main" ]
-    paths: rust-server/**
 
 env:
   CARGO_TERM_COLOR: always
@@ -19,9 +17,16 @@ jobs:
         working-directory: ./rust-server
     steps:
     - uses: actions/checkout@v3
+    - name: Filter files
+      uses: dorny/paths-filter@v2
+      id: filter
+      with:
+        filters: |
+          backend:
+            - 'rust-server/**'
     - name: Build
+      if: steps.filter.outputs.backend == 'true'
       run: cargo build --verbose
     - name: Run tests
+      if: steps.filter.outputs.backend == 'true'
       run: cargo test --verbose
-
-## TODO add frontend tests 
