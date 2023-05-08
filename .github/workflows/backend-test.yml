@@ -16,26 +16,17 @@ jobs:
       run:
         working-directory: ./rust-server
     steps:
-    - name: Check if relevant files have changed
-      uses: actions/github-script@0.9.0
-      id: backend-changed
-      with:
-        result-encoding: string
-        script: |
-          const result = await github.pulls.listFiles({
-            owner: context.payload.repository.owner.login,
-            repo: context.payload.repository.name,
-            pull_number: context.payload.number,
-            per_page: 100
-          })
-          const backendChanged = result.data.filter(f => f.filename.startsWith("rust-server/")).length > 0
-          console.log(backendChanged)
-          return backendChanged
     - uses: actions/checkout@v3
-      if: ${{ steps.backend-changed.outputs.result == 'true' }}
+    - name: Filter files
+      uses: dorny/paths-filter@v2
+      id: filter
+      with:
+        filters: |
+          backend:
+            - 'rust-server/**'
     - name: Build
-      if: ${{ steps.backend-changed.outputs.result == 'true' }}
+      if: steps.filter.outputs.backend == 'true'
       run: cargo build --verbose
     - name: Run tests
-      if: ${{ steps.backend-changed.outputs.result == 'true' }}
+      if: steps.filter.outputs.backend == 'true'
       run: cargo test --verbose
